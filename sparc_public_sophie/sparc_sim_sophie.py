@@ -32,7 +32,7 @@ def sparc_posterior_probs(code_params, decode_params, awgn_var, ldpc_vec, rand_s
 
     # Simulation
     beta0, x, Ab, Az = sparc_encode_ldpc(code_params, awgn_var, rand_seed, ldpc_vec)
-    print("sparse vector [0:16] ", beta0[0:16], "\n")
+    # print("sparse vector [0:16] ", beta0[0:16], "\n")
     y                        = awgn_channel(x, awgn_var, rand_seed)
     beta, T, nmse, expect = sparc_decode_posterior_probs(y, code_params, decode_params,
                                                  awgn_var, rand_seed, beta0, Ab, Az)

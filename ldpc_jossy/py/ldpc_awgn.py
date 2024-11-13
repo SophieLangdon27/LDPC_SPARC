@@ -57,7 +57,8 @@ def bpsk(x):
 
 
 
-def sim(standard, rate, z, ptype="A"):
+def sim(standard, rate, z, ptype='A', N_MEASUREMENTS=24, C_AWGN_OFFSET=1.0, P_STEP=100.0,
+        MIN_ERRORS = 100, MAX_BLOCKS = 400000):
 
     if rate == "1/2":
         R = .5
@@ -72,22 +73,19 @@ def sim(standard, rate, z, ptype="A"):
 
     # start 1 dB above the SNR corresponding to AWGN rate
     # (which is above capacity since this is a BiAWGN)
-    SNR = 10.0*np.log10(np.power(2,R)-1.0) + 1.0
+    SNR = 10.0*np.log10(np.power(2,R)-1.0) + C_AWGN_OFFSET
 
     mycode = ldpc.code(standard, rate, z, ptype)
     K = mycode.K
 
     res = []
 
-    # number of EbNo points measured
-    N_MEASUREMENTS = 24
-    
     for datapoint in range(N_MEASUREMENTS): 
         nbiterrors = 0
         nblockerrors = 0
         nblocks = 0
         nit_total = 0
-        while nblockerrors < 100:
+        while nblockerrors < MIN_ERRORS:
             u = np.random.randint(0,2,K)
             x = mycode.encode(u)
             xm = bpsk(x)
@@ -105,7 +103,7 @@ def sim(standard, rate, z, ptype="A"):
             nblocks += 1
             nit_total += nit
 
-            if nblocks >= 400000:
+            if nblocks >= MAX_BLOCKS:
                 break
             
         f = open('data/results.txt', 'a')
@@ -114,8 +112,16 @@ def sim(standard, rate, z, ptype="A"):
         f.write(str(output))
         f.write("\n")
         f.close()
-        SNR += np.sqrt(100.0/nblocks)
-            
+    
+        SNR += np.sqrt(P_STEP/nblocks) # heuristic SNR stepping method
+        # the SNR will be increased in dB by a number that depends on the number
+        # of blocks that were required to measure the current block error rate.
+        # Since the measurement is set to observe at least MIN_ERRORS errors, the number
+        # of blocks will be larger for smaller error rates (up to a maximum of 
+        # MAX_BLOCKS), this heuristic will adopt smaller step sizes as the error
+        # rate becomes smaller. The sqrt() was found to give a better step size
+        # heuristically.
+        
 if __name__ == "__main__":
     if len(sys.argv) > 1: # args numbered 1 to 36 (better for grid engine calls
         argind = int(sys.argv[1])-1
