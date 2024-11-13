@@ -3,8 +3,7 @@
 # Copyright (c) 2020 Kuan Hsieh
 
 import numpy as np
-from sparc_public_sophie.sparc_sophie import sparc_encode_ldpc, sparc_decode_posterior_probs
-from sparc_public_sophie.sparc_sophie import sparc_encode, sparc_decode
+from sparc_public_sophie.sparc_sophie import sparc_ldpc_encode, sparc_ldpc_decode, sparc_encode, sparc_decode
 
 def sparc_sim_sophie(code_params, decode_params, awgn_var, rand_seed=None): 
     # Currently cheating as encoder directly passes fast transforms Ab and Az to
@@ -20,24 +19,13 @@ def sparc_sim_sophie(code_params, decode_params, awgn_var, rand_seed=None):
     
     return bits_i, bits_o, beta, T, nmse, expect
 
-def sparc_posterior_probs(code_params, decode_params, awgn_var, ldpc_vec, rand_seed=None):
-
-    """
-    End-to-end simulation of Sparse Regression Code (SPARC) encoding/decoding
-    in AWGN channel.
-    """
-
-    # Currently cheating as encoder directly passes fast transforms Ab and Az to
-    # the deocder. (Decoder doesn't use random seed to generate fast transform.)
-
-    # Simulation
-    beta0, x, Ab, Az = sparc_encode_ldpc(code_params, awgn_var, rand_seed, ldpc_vec)
-    # print("sparse vector [0:16] ", beta0[0:16], "\n")
-    y                        = awgn_channel(x, awgn_var, rand_seed)
-    beta, T, nmse, expect = sparc_decode_posterior_probs(y, code_params, decode_params,
+def sparc_ldpc_sim_sophie(code_params, ldpc_params, decode_params, awgn_var, rand_seed=None): 
+    bits_i, beta0, x, Ab, Az = sparc_ldpc_encode(code_params, ldpc_params, awgn_var, rand_seed)
+    y                        = awgn_channel(x, awgn_var, rand_seed) # Produces the received vector after the channel
+    bits_o, beta, T, nmse,   = sparc_ldpc_decode(y, code_params, ldpc_params, decode_params, 
                                                  awgn_var, rand_seed, beta0, Ab, Az)
-
-    return beta
+    
+    return bits_i, bits_o, beta, T, nmse
 
 
 ######## Channel models ########

@@ -6,6 +6,8 @@ import numpy as np
 from scipy.fftpack import dct, idct
 import time
 from copy import copy
+from ldpc_jossy.py.ldpc import code 
+import warnings
 ######## Miscellaneous ########
 
 def is_power_of_2(x):
@@ -14,13 +16,25 @@ def is_power_of_2(x):
 ########## Encoder/Decoder pairs ##########
 
 ### Main encode/decode functions
-def sparc_encode_ldpc(code_params, awgn_var, rand_seed, ldpc_vec): 
+
+def sparc_ldpc_encode(code_params, ldpc_params, awgn_var, rand_seed):
 
     check_code_params(code_params)
     R,L,M = map(code_params.get,['R','L','M'])
     K = code_params['K'] if code_params['modulated'] else 1
+    logM = int(np.log2(M))
 
-    bit_len = ldpc_vec.size
+    # ldpc code 
+    c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
+    # Generate random bits
+    rng = np.random.RandomState(rand_seed)
+    bits_in = rng.randint(2, size=c.K)
+    ldpc_vec = c.encode(bits_in)
+    ldpc_vec = ldpc_vec.astype(bool)
+    bit_len = c.N
+    assert ldpc_vec.size == L*logM
+
+    # Convert bits to message vector
     beta0 = bin_arr_2_msg_vector(ldpc_vec, M, K)
 
     # Construct base matrix W
@@ -43,7 +57,7 @@ def sparc_encode_ldpc(code_params, awgn_var, rand_seed, ldpc_vec):
     # Generate random codeword
     x = Ab(beta0)
 
-    return beta0, x, Ab, Az
+    return bits_in, beta0, x, Ab, Az
 
 def sparc_encode(code_params, awgn_var, rand_seed):
     '''
@@ -83,22 +97,53 @@ def sparc_encode(code_params, awgn_var, rand_seed):
 
     return bits_in, beta0, x, Ab, Az
 
-def sparc_decode_posterior_probs(y, code_params, decode_params, awgn_var, rand_seed, beta0, Ab=None, Az=None):
-    '''
-    Decode SPARC codeword
-    '''
+def sparc_ldpc_decode(y, code_params, ldpc_params, decode_params, awgn_var, rand_seed, beta0, Ab=None, Az=None):
 
     check_decode_params(decode_params)
+    L,M = map(code_params.get,['L','M'])
+    logM = int(np.log2(M))
 
-    # Run AMP decoding (applies hard decision after final iteration)
-    beta, t_final, nmse, psi = sparc_amp_posterior_probs(y, code_params, decode_params,
+    beta, t_final, nmse, _ = sparc_amp_posterior_probs(y, code_params, decode_params,
                                          awgn_var, rand_seed, beta0, Ab, Az)
 
-    # Whether or not we expect a section error.
-    # Can be quite accurate for non power-allocated SPARCs with large M and L.
-    expect_err = psi.mean() >= 0.001
+    # Turns amp posterior probs into ldpc 
+    posterior_probs_sectioned = beta.reshape(L, M)
+    ldpc_probs = np.zeros((L, logM)) 
+    for l in range(L):
+        for i in range(logM): 
+            b = logM - 1 - i
+            k = 0
+            while k < M: 
+                for j in range(k, k+pow(2,i)):
+                    ldpc_probs[l][b] += posterior_probs_sectioned[l][j]
+                k = k + pow(2, i+1)
 
-    return beta, t_final, nmse, expect_err
+    ldpc_probs = ldpc_probs.reshape(L*logM)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*invalid value encountered in log.*")
+        warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*divide by zero.*")
+        
+        # The line where the warning is raised
+        LLR = np.log(ldpc_probs)- np.log(1-ldpc_probs)
+
+    large_negative = -100.0
+    large_positive = 100.0
+    # Replace inf and -inf
+    LLR = np.where(LLR == np.inf, large_positive, LLR)
+    LLR = np.where(LLR == -np.inf, large_negative, LLR)
+    c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
+    app, it = c.decode(LLR)
+
+    hard_bools = (app < 0)
+    bits_out = np.array([int(bool_val) for bool_val in hard_bools])
+
+    t_final = t_final + it
+
+    # TODO: NEED TO FILL THESE IN 
+    beta = 0
+    nmse = 0 
+
+    return bits_out, beta, t_final, nmse
 
 def sparc_decode(y, code_params, decode_params, awgn_var, rand_seed, beta0, Ab=None, Az=None):
     '''
