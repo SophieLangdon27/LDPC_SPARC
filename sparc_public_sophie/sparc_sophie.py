@@ -27,6 +27,7 @@ def sparc_ldpc_encode(code_params, ldpc_params, awgn_var, rand_seed):
     # ldpc code 
     c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
     # Generate random bits
+    # mesg_len = int(logM*L*(1/ldpc_params['int_rate']))
     rng = np.random.RandomState(rand_seed)
     bits_in = rng.randint(2, size=c.K)
     ldpc_vec = c.encode(bits_in)
@@ -57,7 +58,7 @@ def sparc_ldpc_encode(code_params, ldpc_params, awgn_var, rand_seed):
     # Generate random codeword
     x = Ab(beta0)
 
-    return bits_in, beta0, x, Ab, Az
+    return bits_in, beta0, x, Ab, Az, ldpc_vec 
 
 def sparc_encode(code_params, awgn_var, rand_seed):
     '''
@@ -103,7 +104,7 @@ def sparc_ldpc_decode(y, code_params, ldpc_params, decode_params, awgn_var, rand
     L,M = map(code_params.get,['L','M'])
     logM = int(np.log2(M))
 
-    beta, t_final, nmse, _ = sparc_amp_posterior_probs(y, code_params, decode_params,
+    beta, t_final, _, _ = sparc_amp_posterior_probs(y, code_params, decode_params,
                                          awgn_var, rand_seed, beta0, Ab, Az)
 
     # Turns amp posterior probs into ldpc 
@@ -136,14 +137,11 @@ def sparc_ldpc_decode(y, code_params, ldpc_params, decode_params, awgn_var, rand
 
     hard_bools = (app < 0)
     bits_out = np.array([int(bool_val) for bool_val in hard_bools])
+    bits_out = bits_out[:c.K]
 
-    t_final = t_final + it
+    t_total = t_final + it
 
-    # TODO: NEED TO FILL THESE IN 
-    beta = 0
-    nmse = 0 
-
-    return bits_out, beta, t_final, nmse
+    return bits_out, t_total
 
 def sparc_decode(y, code_params, decode_params, awgn_var, rand_seed, beta0, Ab=None, Az=None):
     '''
@@ -165,6 +163,13 @@ def sparc_decode(y, code_params, decode_params, awgn_var, rand_seed, beta0, Ab=N
     bits_out = msg_vector_2_bin_arr(beta, code_params['M'], K)
 
     return bits_out, beta, t_final, nmse, expect_err
+
+def bit_err_rate(bits_in, bits_out): 
+
+    assert len(bits_in == bits_out)
+    ber = np.sum(bits_in != bits_out) / len(bits_in)
+
+    return ber
 
 ### Check code/decode/channel params functions
 def check_code_params(code_params):
@@ -1022,7 +1027,7 @@ def sparc_amp_posterior_probs(y, code_params, decode_params, awgn_var, rand_seed
 
 
     # Run AMP decoder
-    for t in range(t_max):
+    for t in range(t_max-1):
         if t > 0:
             psi_prev = np.copy(psi)
             phi_prev = np.copy(phi)
@@ -1079,16 +1084,9 @@ def sparc_amp_posterior_probs(y, code_params, decode_params, awgn_var, rand_seed
             nmse[t:] = nmse[t]
             break
 
+    # This has 1 less 'iteration' than the normal sparc_amp because it doesn't do the 
+    # hard decoding, it does t_max - 1 iterations then passes on the probabilities. 
     t_final = t
-
-    # Obtain final beta estimate by doing hard decision
-    # Hard decision is done on s and not beta NOT on because s has the correct
-    # distributional property (true beta + Gaussian noise).
-    # So then doing hard decision on s is actually doing MAP estimation.
-    # Recall that beta^{t+1} is the MMSE estimator. Therefore, we can see this as
-    # doing MAP instead of MMSE in the last iteration.
-    # The BER analysis using SE parameter tau also assumes s is used.
-    # beta = msg_vector_map_estimator(s, M, K)
 
     return beta, t_final, nmse, psi
 
