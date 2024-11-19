@@ -13,14 +13,14 @@ run_sim = True
 run_plots = True
 
 if run_sim: 
-    test_num = 5
+    test_num = 6
     code_params_sparc   = { 'P': 15.0,    # Average codeword symbol power constraint
-                            'R': 1.5,     # Rate
-                            'L': 486,    # Number of sections
+                            'R': 1.4,     # Rate
+                            'L': 1620,    # Number of sections
                             'M': 16}      # Columns per section
     code_params_ldpc    = { 'P': 15.0,    # Average codeword symbol power constraint
-                            'R': 1.5,     # Rate
-                            'L': 486,    # Number of sections
+                            'R': 1.68,     # Rate
+                            'L': 1944,    # Number of sections
                             'M': 16}      # Columns per section
     ldpc_params   = {'standard': '802.11n',
                     'rate'     : '5/6', 
@@ -28,7 +28,7 @@ if run_sim:
                     'int_rate' :  5/6}
     P = code_params_sparc['P']
     decode_params = {'t_max': 25}  # Maximum number of iterations
-    num_of_runs   = 15             # Number of encoding/decoding trials
+    num_of_runs   = 10             # Number of encoding/decoding trials
     rng = np.random.RandomState(seed=None) # Random number generator
     # By having the seed as None the random number generator is different each time
 
@@ -59,7 +59,7 @@ if run_sim:
     R1, L1, M1 = map(code_params_sparc.get,['R','L','M']) 
     R2, L2, M2 = map(code_params_ldpc.get,['R','L','M'])
     R3 = round(ldpc_params['int_rate'], 2)
-    np.savez(f'performance_plot_arrays/Power_{P}_sparc_R_{R1}_L_{L1}_M_{M1}_ldpc_Rs_{R2}_L_{L2}_M_{M2}_Rl_{R3}.npz', ber_store = ber_store_transpose, snr_store = snr_store)
+    np.savez(f'performance_plot_arrays/Test_{test_num}_Power_{P}_sparc_R_{R1}_L_{L1}_M_{M1}_ldpc_Rs_{R2}_L_{L2}_M_{M2}_Rl_{R3}.npz', ber_store = ber_store_transpose, snr_store = snr_store)
 
 if run_plots: 
     plt.figure(figsize=(15,4))

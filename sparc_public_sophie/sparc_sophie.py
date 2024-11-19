@@ -27,12 +27,19 @@ def sparc_ldpc_encode(code_params, ldpc_params, awgn_var, rand_seed):
     # ldpc code 
     c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
     # Generate random bits
-    # mesg_len = int(logM*L*(1/ldpc_params['int_rate']))
+    mesg_len = int(logM*L*(ldpc_params['int_rate']))
     rng = np.random.RandomState(rand_seed)
-    bits_in = rng.randint(2, size=c.K)
-    ldpc_vec = c.encode(bits_in)
+    bits_in = rng.randint(2, size=mesg_len)
+    assert len(bits_in) % c.K == 0
+    num_blocks = len(bits_in) / c.K
+    bits_in_split = np.array_split(bits_in, num_blocks)
+    ldpc_vec = []
+    for chunk in bits_in_split: 
+        ldpc_vec.append(c.encode(chunk))
+    ldpc_vec = np.array(ldpc_vec)
+    ldpc_vec = ldpc_vec.flatten()
     ldpc_vec = ldpc_vec.astype(bool)
-    bit_len = c.N
+    bit_len = ldpc_vec.size
     assert ldpc_vec.size == L*logM
 
     # Convert bits to message vector
@@ -133,13 +140,20 @@ def sparc_ldpc_decode(y, code_params, ldpc_params, decode_params, awgn_var, rand
     LLR = np.where(LLR == np.inf, large_positive, LLR)
     LLR = np.where(LLR == -np.inf, large_negative, LLR)
     c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
-    app, it = c.decode(LLR)
+
+    assert len(LLR) % c.N == 0
+    num_blocks = len(LLR) / c.N
+    LLR = np.array_split(LLR, num_blocks)
+    app = []
+    for chunk in LLR: 
+        app.append(c.decode(chunk)[0][:c.K])
+    app = np.array(app)
+    app = app.flatten()
 
     hard_bools = (app < 0)
     bits_out = np.array([int(bool_val) for bool_val in hard_bools])
-    bits_out = bits_out[:c.K]
 
-    t_total = t_final + it
+    t_total = None
 
     return bits_out, t_total
 
