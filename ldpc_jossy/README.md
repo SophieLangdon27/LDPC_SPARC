@@ -8,6 +8,9 @@ on my laptop as different changes are needed for each laptop but I have
 committed it for backup purposes. To follow the instructions in the 
 white paper the original zip file must be used. 
 
+At the time of using this I used Python 3.12.0, pip 23.2.1, pytest 8.2.1 and numpy 1.26.1
+NOTE: It did not work with a more recent version of numpy!!!!!
+
 # ldpc
 This package contains an implementation of encoders and 
 decoders for the low-density parity-check (LDPC) codes

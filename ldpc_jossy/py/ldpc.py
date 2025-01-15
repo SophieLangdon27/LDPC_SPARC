@@ -464,7 +464,7 @@ class code:
         vdeg = self.vdeg
         cdeg = self.cdeg
         intrlv = self.intrlv
-        c_ldpc = ct.CDLL("C:/msys64/home/sophi/ldpc_jossy/bin/c_ldpc.dll")
+        c_ldpc = ct.CDLL("C:/msys64/home/sophi/ldpc_jossy/bin/c_ldpc.dll")  
         # preliminary consistency checks
         if len(ch) != len(vdeg):
             raise NameError('Channel inputs not consistent with variable degrees')
