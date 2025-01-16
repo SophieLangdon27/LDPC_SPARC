@@ -3,7 +3,7 @@
 # Copyright (c) 2020 Kuan Hsieh
 
 import numpy as np
-from sparc_public_sophie.sparc_sophie import sparc_ldpc_encode, sparc_ldpc_decode, sparc_encode, sparc_decode, sparc_ldpc_decode_2, bit_err_rate
+from sparc_sophie.sparc_sophie import sparc_ldpc_encode, sparc_ldpc_decode, sparc_encode, sparc_decode, sparc_ldpc_decode_2, bit_err_rate
 
 def sparc_sim_sophie(code_params, decode_params, awgn_var, rand_seed=None): 
     # Currently cheating as encoder directly passes fast transforms Ab and Az to

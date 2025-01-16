@@ -6,8 +6,8 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 import numpy as np 
-from sparc_public_sophie.sparc_sim_sophie import sparc_sim_sophie, sparc_ldpc_sim_sophie, sparc_ldpc_sim_sophie_re_run
-import matplotlib.pyplot as plt
+from sparc_sophie.sparc_sim_sophie import sparc_sim_sophie, sparc_ldpc_sim_sophie, sparc_ldpc_sim_sophie_re_run
+import matplotlib.pyplot as plt # type: ignore
 
 run_sim = True 
 run_plots = True

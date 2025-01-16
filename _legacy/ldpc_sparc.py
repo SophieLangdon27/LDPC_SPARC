@@ -6,9 +6,9 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 import numpy as np 
-from sparc_public_sophie import sparc_posterior_probs
 from ldpc_jossy.py.ldpc import code
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt # type: ignore
+from sparc_sophie import sparc_posterior_probs
 import time
 
 import warnings
