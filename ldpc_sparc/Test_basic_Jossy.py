@@ -1,3 +1,8 @@
+'''
+My own test of Jossy's LDPC library 
+
+'''
+
 import sys
 import os
 
