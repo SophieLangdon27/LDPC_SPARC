@@ -34,7 +34,7 @@ if run_sim:
     rng = np.random.RandomState(seed=None) # Random number generator
     # By having the seed as None the random number generator is different each time
 
-    num_vars    = 1
+    num_vars    = 15
     var_start   = 1 
     var_stop    = 8
     ber_store_sparc  = np.zeros((num_vars, num_of_runs))
@@ -46,8 +46,8 @@ if run_sim:
     for i in range(num_of_runs):
         rng_seed = rng.randint(0, 2**31-1, size=2).tolist()    # This generates two random integers, not sure why
         for v in range(num_vars):  
-            _,_,_,_,_,_, ber_sparc = sparc_sim_sophie(code_params_sparc, decode_params, awgn_var_store[v], rng_seed) 
-            _, _, _, ber_sparc_ldpc = sparc_ldpc_sim_sophie(code_params_ldpc, ldpc_params, decode_params, awgn_var_store[v], rng_seed)
+            _, _, ber_sparc = sparc_sim_sophie(code_params_sparc, decode_params, awgn_var_store[v], rng_seed) 
+            _, _, ber_sparc_ldpc = sparc_ldpc_sim_sophie(code_params_ldpc, ldpc_params, decode_params, awgn_var_store[v], rng_seed)
             ber_store_sparc[v][i] = ber_sparc        # The nmse is calculated for every iteration in amp 
             ber_store_sparc_ldpc[v][i] = ber_sparc_ldpc       # The nmse is calculated once at the end of bp 
 
@@ -61,7 +61,7 @@ if run_sim:
     R1, L1, M1 = map(code_params_sparc.get,['R','L','M']) 
     R2, L2, M2 = map(code_params_ldpc.get,['R','L','M'])
     R3 = round(ldpc_params['int_rate'], 2)
-    #np.savez(f'performance_plot_arrays/Test_{test_num}_Power_{P}_sparc_R_{R1}_L_{L1}_M_{M1}_ldpc_Rs_{R2}_L_{L2}_M_{M2}_Rl_{R3}.npz', ber_store = ber_store_transpose, snr_store = snr_store)
+    np.savez(f'performance_plot_arrays/Test_{test_num}_Power_{P}_sparc_R_{R1}_L_{L1}_M_{M1}_ldpc_Rs_{R2}_L_{L2}_M_{M2}_Rl_{R3}.npz', ber_store = ber_store_transpose, snr_store = snr_store)
 
 if run_plots: 
     plt.figure(figsize=(15,4))
@@ -76,6 +76,6 @@ if run_plots:
 
     # Show the plot
     plt.tight_layout()
-    #plt.savefig(f'performance_plots/Test_{test_num}_Power_{P}_sparc_R_{R1}_L_{L1}_M_{M1}_ldpc_Rs_{R2}_L_{L2}_M_{M2}_Rl_{R3}.png')
+    plt.savefig(f'performance_plots/Test_{test_num}_Power_{P}_sparc_R_{R1}_L_{L1}_M_{M1}_ldpc_Rs_{R2}_L_{L2}_M_{M2}_Rl_{R3}.png')
     plt.show()
 

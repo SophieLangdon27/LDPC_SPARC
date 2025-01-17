@@ -13,7 +13,7 @@ sys.path.append(parent_dir)
 import numpy as np 
 from ldpc_jossy.py.ldpc import code
 
-c = code()
+c = code('802.11n','5/6',81)
 print("Standard ", c.standard, ", Rate ", c.rate, ", z ", c.z, ", k ", c.K, ", n", c.N, "\n")
 
 raw_input_bits = np.random.randint(0, 2, c.K)

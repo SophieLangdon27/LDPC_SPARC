@@ -1,0 +1,41 @@
+Tests
+Calculations: R = k/n
+len(k) = logM x L 
+
+1. SPARC -- Rate: 0.75 k = 324 n = 432
+LDPC -- Rate: 1.5 x 0.5 m = 324 k = 648 n = 432
+
+SPARC does much better because a 0.75 R is much easier to decode than a 1.5 R. I think for the LDPC to have a good effect it needs to be a much larger rate. Not 0.5. 
+
+2. SPARC -- Rate: 1.125 k = 1620 n = 1440
+LDPC -- Rate: 1.35 x 5/6 m = 1620 k = 1944 n = 1440
+
+Again SPARC is much better, must be because of the gains of a 1.125 R compared to 1.35
+
+3. SPARC -- Rate: 1.125 k = 1944 n = 1728
+LDPC -- Rate: 1.35 x 5/6 m = 1620 k = 1944 n = 1440
+
+Same rate but now n is larger 
+
+4. SPARC -- Rate: 1.35 k = 1944 n = 1440
+LDPC -- Rate: 1.35 x 5/6 = 1.125 m = 1620 k = 1944 n = 1440
+
+5. SPARC -- Rate: 1.5 k = 1944 n = 1296
+LDPC -- Rate: 1.5 x 5/6 = 1.25 m = 1620 k = 1944 n = 1296
+
+Tests 4 and 5 show that adding an LDPC code afterwards improves the performance but this is at the expense of a smaller rate. There must be a balance at where it can improve both. 
+
+6. SPARC -- Rate: 1.4 k = 6480 n = 4629      
+LDPC -- Rate: 1.68 x 5/6 m = 6480 k = 7776 n = 4629
+logM = 4, M = 16, L = 1944
+
+7. SPARC -- Rate: 1.0 k = 5496 n = 5496      
+SPARC+LDPC -- Sparc Rate: 1.118 m = 3240 k = 6144 n = 5496
+
+Even with only using ldpc on the first section the ldpc + sparc still gives worse results. 
+
+8. Re-running AMP with original amp for unprotected and correct for ldpc
+
+9. Re-running AMP with zeros for unprotected and correct ldpc 
+
+10. Re-running AMP for only when the ldpc codeword is correctly decoded. 

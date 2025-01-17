@@ -1,23 +1,27 @@
-# Python code to run Sparse Regression Code (SPARCs) simulations
-#
-# Copyright (c) 2020 Kuan Hsieh
+'''
+Top functions for encoding and decoding and all other functions needed for it. 
+'''
 
 import numpy as np
-from scipy.fftpack import dct, idct
+from scipy.fftpack import dct, idct # type: ignore
 import time
 from copy import copy
 from ldpc_jossy.py.ldpc import code 
 import warnings
-######## Miscellaneous ########
+######## Miscellaneous ######## ----------------------------------------------------------------------------------------------------------------
 
 def is_power_of_2(x):
     return (x > 0) and ((x & (x - 1)) == 0)
 
-########## Encoder/Decoder pairs ##########
+########## Encoder/Decoder pairs ########## --------------------------------------------------------------------------------------------------
 
-### Main encode/decode functions
+### Main encode/decode functions -------------------------------------------------------------------------------------------------------------
 
-def sparc_ldpc_encode(code_params, ldpc_params, awgn_var, rand_seed):
+def sparc_ldpc_encode(code_params, ldpc_params, awgn_var, lengths, rand_seed):
+    ''' 
+    Encodes random message vector to an LDPC codeword then SPARC codeword.
+    Note this is only for partially protected codes. 
+    '''
 
     check_code_params(code_params)
     R,L,M = map(code_params.get,['R','L','M'])
@@ -26,14 +30,8 @@ def sparc_ldpc_encode(code_params, ldpc_params, awgn_var, rand_seed):
 
     # ldpc code 
     c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
-    # Generate random bits
-    k_ldpc = c.K*ldpc_params["mults"]
-    n_ldpc = int(k_ldpc / ldpc_params["int_rate"])
-    L_parity = int((n_ldpc-k_ldpc)/logM)
-    L_user = L - L_parity 
-    L_protected = k_ldpc/logM
-    L_ldpc = L_protected + L_parity 
-    L_unprotected = L_user - L_protected 
+    L_unprotected, k_ldpc = map(lengths.get,['L_unprotected','k_ldpc'])
+
     # mesg_len = int(logM*L*(ldpc_params['int_rate']))
     rng = np.random.RandomState(rand_seed)
     unprotected_bit_len = int(L_unprotected*logM)
@@ -116,8 +114,10 @@ def sparc_encode(code_params, awgn_var, rand_seed):
 
     return bits_in, beta0, x, Ab, Az
 
-def sparc_ldpc_decode(y, code_params, ldpc_params, decode_params, awgn_var, rand_seed, beta0, Ab=None, Az=None):
-
+def sparc_ldpc_decode(y, code_params, ldpc_params, decode_params, awgn_var, rand_seed, beta0, lengths, Ab=None, Az=None):
+    '''
+    Decodes using AMP then BP.
+    '''
     check_decode_params(decode_params)
     L,M = map(code_params.get,['L','M'])
     logM = int(np.log2(M))
@@ -126,13 +126,7 @@ def sparc_ldpc_decode(y, code_params, ldpc_params, decode_params, awgn_var, rand
                                          awgn_var, rand_seed, beta0, Ab, Az)
     
     c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
-    k_ldpc = c.K*ldpc_params["mults"]
-    n_ldpc = k_ldpc / ldpc_params["int_rate"]
-    L_parity = (n_ldpc-k_ldpc)/logM
-    L_user = L - L_parity
-    L_protected = k_ldpc/logM
-    L_unprotected = L_user - L_protected 
-    L_ldpc = int(L_protected + L_parity)
+    L_unprotected, L_ldpc = map(lengths.get,['L_unprotected','L_ldpc'])
     unprotected_sparse_len = int(L_unprotected*M)
     ldpc_bits   = beta[unprotected_sparse_len:]
 
@@ -183,8 +177,10 @@ def sparc_ldpc_decode(y, code_params, ldpc_params, decode_params, awgn_var, rand
 
     return bits_out, t_total
 
-def sparc_ldpc_decode_2(y, code_params, ldpc_params, decode_params, awgn_var, rand_seed, beta0,  Ab=None, Az=None): 
-    
+def sparc_ldpc_decode_2(y, code_params, ldpc_params, decode_params, awgn_var, rand_seed, beta0, lengths,  Ab=None, Az=None): 
+    '''
+    Decodes using AMP then BP then AMP again 
+    '''
     check_decode_params(decode_params)
     L,M = map(code_params.get,['L','M'])
     logM = int(np.log2(M))
@@ -193,13 +189,7 @@ def sparc_ldpc_decode_2(y, code_params, ldpc_params, decode_params, awgn_var, ra
                                          awgn_var, rand_seed, beta0, Ab, Az)
     
     c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
-    k_ldpc = c.K*ldpc_params["mults"]
-    n_ldpc = k_ldpc / ldpc_params["int_rate"]
-    L_parity = (n_ldpc-k_ldpc)/logM
-    L_user = L - L_parity
-    L_protected = int(k_ldpc/logM)
-    L_unprotected = int(L_user - L_protected)
-    L_ldpc = int(L_protected + L_parity)
+    L_unprotected, L_ldpc = map(lengths.get,['L_unprotected','L_ldpc'])
     unprotected_sparse_len = int(L_unprotected*M)
     ldpc_bits   = beta[unprotected_sparse_len:]
 
@@ -272,6 +262,9 @@ def sparc_ldpc_decode_2(y, code_params, ldpc_params, decode_params, awgn_var, ra
     return bits_out
 
 def sparc_transforms_mod(Ab, Az, n, unprotected_len): 
+    '''
+    Modifies matrix functions so that they only apply to the unprotected parts. 
+    '''
     def Ab_mod(x): 
         assert x.size == unprotected_len
         extra_zeros = np.zeros(int(n - unprotected_len))
@@ -307,13 +300,16 @@ def sparc_decode(y, code_params, decode_params, awgn_var, rand_seed, beta0, Ab=N
     return bits_out, beta, t_final, nmse, expect_err
 
 def bit_err_rate(bits_in, bits_out): 
+    '''
+    Calculates bit error rate from bits in and out 
+    '''
 
     assert len(bits_in == bits_out)
     ber = np.sum(bits_in != bits_out) / len(bits_in)
 
     return ber
 
-### Check code/decode/channel params functions
+### Check code/decode/channel params functions ---------------------------------------------------------------------------------------------------
 def check_code_params(code_params):
     '''
     Check SPARC code parameters
@@ -338,7 +334,7 @@ def check_code_params(code_params):
             code_params[item] = False # default
         else:
             assert type(code_params[item]) == bool,\
-                    "'{}' must be boolean".format(key)
+                    "'{}' must be boolean".format(key) # type: ignore
         code_params_copy[item] = copy(code_params[item])
 
     # Required SPARC code parameters (all SPARC types)
@@ -409,7 +405,7 @@ def check_decode_params(decode_params):
     assert type(rtol)==float and 0<rtol<1
     assert phi_est_method==1 or phi_est_method==2
 
-######## Binary operations ########
+######## Binary operations ######## --------------------------------------------------------------------------------------------------------
 
 def rnd_bin_arr(k, rand_seed):
     '''
@@ -440,7 +436,7 @@ def int_2_bin_arr(integer, arr_length):
     #return np.array(list(bin(integer)[2:])).astype('bool')
     #return np.array(list("{0:b}".format(integer))).astype('bool')
 
-######## PSK modulation operations ########
+######## PSK modulation operations ######## -----------------------------------------------------------------------------------------------------
 
 # TAKEN FROM WIKIPEDIA
 def bin2gray(num):
@@ -538,7 +534,7 @@ def psk_demod(symbols, K):
 
     return bin_arr
 
-######## Message vector operations ########
+######## Message vector operations ######## ----------------------------------------------------------------------------------------------------
 
 def rnd_msg_vector(L, M, rand_seed, K=1):
     '''
@@ -752,7 +748,7 @@ def msg_vector_map_estimator(s, M, K=1):
 
     return beta.ravel()
 
-######## Base matrix design operations ########
+######## Base matrix design operations ######## ----------------------------------------------------------------------------------------------
 
 def pa_iterative(P, sigmaSqr, B, R_PA):
     ''' Iterative power allocation based on asymptotic SE.
@@ -829,7 +825,7 @@ def create_base_matrix(P, power_allocated=False, spatially_coupled=False, **kwar
 
     return W
 
-######## DCT/FFT operations ########
+######## DCT/FFT operations ######## ----------------------------------------------------------------------------------------------------------
 
 def sub_fft(m, n, seed=0, order0=None, order1=None):
     """
@@ -1120,7 +1116,7 @@ def sparc_transforms(W, L, M, n, rand_seed, csparc=False):
 
     return Ab, Az
 
-######## AMP decoder ########
+######## AMP decoder ######## --------------------------------------------------------------------------------------------------------------
 def sparc_amp_posterior_probs(y, code_params, decode_params, awgn_var, rand_seed, beta0, Ab=None, Az=None):
     """
     AMP decoder for Spatially Coupled Sparse Regression Codes
@@ -1590,7 +1586,7 @@ def sparc_amp(y, code_params, decode_params, awgn_var, rand_seed, beta0, Ab=None
 
     return beta, t_final, nmse, psi
 
-########################### TESTS ###########################
+########################### TESTS ########################### --------------------------------------------------------------------------------
 
 def test_bin_arr_msg_vector(k=1024*9, M=2**9):
     seed = list(np.random.randint(2**32-1, size=2))
