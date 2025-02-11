@@ -253,11 +253,45 @@ def sparc_ldpc_decode_2(y, code_params, ldpc_params, decode_params, awgn_var, ra
 
     Ab_mod, Az_mod = sparc_transforms_mod(Ab, Az, L*M, L_unprotected*M)
 
-    beta_unprotected, _, _, _ = sparc_amp_2(y_dash, code_params, decode_params,
-                                         awgn_var, rand_seed, beta0[:L_unprotected*M], L_unprotected, Ab_mod, Az_mod)
-    
-    unprotected_bits_out = msg_vector_2_bin_arr(beta_unprotected, code_params['M'])
+    if (L_unprotected == 0): 
+        unprotected_bits_out = []
+    else: 
+        beta_unprotected, _, _, _ = sparc_amp_2(y_dash, code_params, decode_params,
+                                            awgn_var, rand_seed, beta0[:L_unprotected*M], L_unprotected, Ab_mod, Az_mod)
+        
+        unprotected_bits_out = msg_vector_2_bin_arr(beta_unprotected, code_params['M'])
     bits_out = np.concatenate((unprotected_bits_out, protected_bits_out))
+
+    return bits_out
+
+def sparc_ldpc_integrated_wrong_decode(y, code_params, ldpc_params, decode_params, awgn_var, rand_seed, beta0, lengths, Ab=None, Az=None): 
+    '''
+    Decodes using AMP then BP both within each iteration. 
+    '''
+    check_decode_params(decode_params)
+    L,M = map(code_params.get,['L','M'])
+    logM = int(np.log2(M))
+    c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
+    t_max = decode_params['t_max']
+
+    # Initial AMP + BP
+    beta = np.zeros(L*M)
+    z = psi = phi = 0
+    initial = True
+    psi, phi, beta, z = sparc_amp_single_run(code_params, rand_seed, awgn_var, beta, z, psi, phi, y, initial, Ab, Az)
+    ldpc_probs = probs_amp_to_bp(beta, L, M)
+    ldpc_probs, _ = ldpc_bp(ldpc_probs, c)
+
+    initial = False 
+    for i in range(t_max-1): 
+        beta = probs_bp_to_amp(ldpc_probs, L, M)
+        psi, phi, beta, z = sparc_amp_single_run(code_params, rand_seed, awgn_var, beta, z, psi, phi, y, initial, Ab, Az)
+        ldpc_probs = probs_amp_to_bp(beta, L, M)
+        ldpc_probs, app_cut = ldpc_bp(ldpc_probs, c)
+
+    
+    bools_out = (app_cut < 0)
+    bits_out = np.array([int(bool_val) for bool_val in bools_out])
 
     return bits_out
 
@@ -1116,7 +1150,7 @@ def sparc_transforms(W, L, M, n, rand_seed, csparc=False):
 
     return Ab, Az
 
-######## AMP decoder ######## --------------------------------------------------------------------------------------------------------------
+######## AMP + BP decoder ######## --------------------------------------------------------------------------------------------------------------
 def sparc_amp_posterior_probs(y, code_params, decode_params, awgn_var, rand_seed, beta0, Ab=None, Az=None):
     """
     AMP decoder for Spatially Coupled Sparse Regression Codes
@@ -1234,6 +1268,8 @@ def sparc_amp_posterior_probs(y, code_params, decode_params, awgn_var, rand_seed
 def sparc_amp_re_run(y, code_params, decode_params, awgn_var, rand_seed, beta0, beta_initial, Ab=None, Az=None):
     """
     AMP decoder for Spatially Coupled Sparse Regression Codes
+
+    NOTE: I can't remember what this one does differently, currently not used anywhere
 
     y: received (noisy) output symbols
     awgn_var: awgn channel noise variance
@@ -1353,6 +1389,9 @@ def sparc_amp_2(y, code_params, decode_params, awgn_var, rand_seed, beta0, L_unp
     """
     AMP decoder for Spatially Coupled Sparse Regression Codes
 
+    NOTE: This is very similar to sparc_amp but L_unprotected is passed as it's only done for 
+    the unprotected sections.
+
     y: received (noisy) output symbols
     awgn_var: awgn channel noise variance
     beta0: true message vector, only used to calculate NMSE.
@@ -1467,6 +1506,115 @@ def sparc_amp_2(y, code_params, decode_params, awgn_var, rand_seed, beta0, L_unp
     beta = msg_vector_map_estimator(s, M, K)
 
     return beta, t_final, nmse, psi
+
+def sparc_amp_single_run(code_params, rand_seed, awgn_var, beta, z, psi, phi, y, initial, Ab=None, Az=None): 
+
+    # Get code parameters
+    L,M,n = map(code_params.get, ['L','M','n'])
+    K = code_params['K'] if code_params['modulated'] else 1
+
+    # Construct base matrix
+    tmp = code_params.copy()
+    tmp.update({'awgn_var':awgn_var})
+    W = create_base_matrix(**tmp)
+    assert 0 <= W.ndim <= 2
+
+    # Functions to calculate (A * beta) and (A.T * z) if needed
+    if (Ab is None) or (Az is None):
+        Ab, Az = sparc_transforms(W, L, M, n, rand_seed, code_params['complex'])
+
+    if (initial == True): 
+        gamma = W
+        z = y
+        phi = awgn_var + gamma
+        tau = (L*phi/n)/W # Scalar
+        s    = beta + tau * Az(z/phi)
+        beta = msg_vector_mmse_estimator(s, tau, M, K)
+        psi       = 1 - (np.abs(beta)**2).sum()/L
+
+    else: 
+        gamma = W * psi
+        b = gamma/phi 
+        z = y - Ab(beta) + b*z
+        phi = awgn_var + gamma
+        tau = (L*phi/n)/W
+        s    = beta + tau * Az(z/phi)
+        beta = msg_vector_mmse_estimator(s, tau, M, K)
+        psi       = 1 - (np.abs(beta)**2).sum()/L
+
+    return psi, phi, beta, z
+
+def probs_amp_to_bp(beta, L, M): 
+    '''
+    Takes the posterior probabilities given by AMP (beta) and coverts to ldpc probs. 
+    '''
+    logM = int(np.log2(M))
+    # Turns amp posterior probs into ldpc 
+    posterior_probs_sectioned = beta.reshape(L, M)
+    ldpc_probs = np.zeros((L, logM)) 
+    for l in range(L):
+        for i in range(logM): 
+            b = logM - 1 - i
+            k = 0
+            while k < M: 
+                for j in range(k, k+pow(2,i)):
+                    ldpc_probs[l][b] += posterior_probs_sectioned[l][j]
+                k = k + pow(2, i+1)
+
+    ldpc_probs = ldpc_probs.reshape(L*logM)
+
+    return ldpc_probs
+
+def ldpc_bp (ldpc_probs, c):
+    '''
+    Takes in ldpc_probs and decodes using bp, returns the probabilites.
+    '''
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*invalid value encountered in log.*")
+        warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*divide by zero.*")
+        
+        # The line where the warning is raised
+        LLR = np.log(ldpc_probs)- np.log(1-ldpc_probs)
+
+    large_negative = -100.0
+    large_positive = 100.0
+    # Replace inf and -inf
+    LLR = np.where(LLR == np.inf, large_positive, LLR)
+    LLR = np.where(LLR == -np.inf, large_negative, LLR)
+
+    assert len(LLR) % c.N == 0
+    num_blocks = len(LLR) / c.N
+    LLR = np.array_split(LLR, num_blocks)
+    app = []
+    app_cut = []
+    for chunk in LLR: 
+        decoded = c.decode(chunk)[0]
+        app.append(decoded)
+        app_cut.append(decoded[:c.K])
+    app = np.array(app)
+    app_cut = np.array(app_cut)
+    app = app.flatten()
+    app_cut = app_cut.flatten()
+
+    ldpc_probs = (np.exp(app))/(1+np.exp(app))
+
+    return ldpc_probs, app_cut
+
+def probs_bp_to_amp(ldpc_probs, L, M): 
+
+    logM = int(np.log2(M))
+    ldpc_probs_sectioned = ldpc_probs.reshape(L,logM)
+    amp_probs = np.ones((L,M))
+    for l in range(L): #0
+        for i in range(M): #1
+            binary_num = format(i,f"0{logM}b")
+            # The probability is the product of p if binary_num = 1 or (1-p) if binary_num = 0 
+            for j in range(logM): 
+                amp_probs[l][i] = amp_probs[l][i]*ldpc_probs_sectioned[l][j] if (binary_num[j] == '1') else amp_probs[l][i]*(1-ldpc_probs_sectioned[l][j])
+
+    amp_probs = amp_probs.reshape(L*M)
+    return amp_probs
 
 def sparc_amp(y, code_params, decode_params, awgn_var, rand_seed, beta0, Ab=None, Az=None):
     """
