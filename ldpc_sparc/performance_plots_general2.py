@@ -11,7 +11,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 import numpy as np 
-from sparc_sophie.sparc_sim_new import sparc_ldpc_sim
+from sparc_sophie.sparc_sim_new import sparc_ldpc_sim, sparc_ldpc_naive_sim
 from param_calc import param_calc
 from ldpc_jossy.py.ldpc import code
 import matplotlib.pyplot as plt # type: ignore
@@ -19,21 +19,20 @@ import matplotlib.pyplot as plt # type: ignore
 #CHANGE BELOW
 #-------------------------------------------------------------------------------------------------
 # Parameters
-num_sims    = 2
-# sims_labels = ['SPARC', 'SPARC+LDPC', 'SPARC+LDPC+RE_RUN', 'Integrated_wrong_decoder']
-sims_labels = ['SPARC', 'SPARC+LDPC']
+num_sims    = 1
+# sims_labels = ['SPARC', 'SPARC+LDPC', 'SPARC+LDPC+RE_RUN', 'Naive_decoder']
+sims_labels = ['Naive_decoder']
 
-test_num = 19
+test_num = 26
 decode_params = {'t_max': 25, 'rtol' : 1e-6}  # Maximum number of iterations
-decode_params_integrated_wrong = {'t_max': 5}
 num_of_runs   = 1             # Number of encoding/decoding trials
 num_snrs    = 5
 snr_start   = 1 
-snr_stop    = 5 
+snr_stop    = 20 
 
-P = 15.0 
+P = 19.44                   #15.0 
 R = 0.8
-mults = 1
+mults = 3
 percent_protected = 1.0 # 100%
 assert percent_protected >  0.0
 assert percent_protected <= 1.0
@@ -68,7 +67,13 @@ rng = np.random.RandomState(seed=None) # Random number generator
 ber_store = []
 for i in range(num_sims): 
     ber_store.append(np.zeros((num_snrs, num_of_runs)))
-ber_store_averages = np.zeros((num_snrs, num_sims))
+# ber_store_averages = np.zeros((num_snrs, num_sims))
+# ber_store_max = np.zeros((num_snrs, num_sims))
+# ber_store_min = np.zeros((num_snrs, num_sims))
+
+ber_store_averages = np.zeros((num_sims, num_snrs))
+ber_store_max = np.zeros((num_sims, num_snrs))
+ber_store_min = np.zeros((num_sims, num_snrs))
 
 snr_store = np.linspace(snr_start, snr_stop, num_snrs)
 P = sparc_params['P']
@@ -77,27 +82,48 @@ awgn_var_store = P/snr_store
 for i in range(num_of_runs):
     rng_seed = rng.randint(0, 2**31-1, size=2).tolist()    # This generates two random integers, not sure why
     for v in range(num_snrs):  
-        _, _, ber_store[0][v][i] = sparc_ldpc_sim(sparc_params, ldpc_params, lengths, False, decode_params, awgn_var_store[v], rng_seed) 
-        _, _, ber_store[1][v][i] = sparc_ldpc_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        # _, _, ber_store[0][v][i] = sparc_ldpc_sim(sparc_params, ldpc_params, lengths, False, decode_params, awgn_var_store[v], rng_seed) 
+        # _, _, ber_store[1][v][i] = sparc_ldpc_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        _, _, ber_store[0][v][i] = sparc_ldpc_naive_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
         # _, _, ber_store[2][v][i] = sparc_ldpc_sim_sophie_re_run(code_params_ldpc, ldpc_params, decode_params, awgn_var_store[v], lengths, rng_seed)
         print(f"Run {i+1}: Var {v+1}/{num_snrs}")
     
 # Average over runs for each variance
-for j in range(num_snrs): 
-    for s in range(num_sims): 
-        ber_store_averages[j][s] = np.mean(ber_store[s][j])
+for s in range(num_sims): 
+    for j in range(num_snrs): 
+        ber_store_averages[s][j] = np.mean(ber_store[s][j])
+        ber_store_max[s][j] = np.max(ber_store[s][j])
+        ber_store_min[s][j] = np.min(ber_store[s][j])
 
-ber_store_transpose = ber_store_averages.T
+
+# for j in range(num_snrs): 
+#     for s in range(num_sims): 
+#         ber_store_averages[j][s] = np.mean(ber_store[s][j])
+#         ber_store_max[j][s] = np.max(ber_store[s][j])
+#         ber_store_min[j][s] = np.min(ber_store[s][j])
+
+# ber_store_transpose = ber_store_averages.T
+
+# Compute error bars
+y_err_lower = ber_store_averages - ber_store_min  # Distance from avg to min
+y_err_upper = ber_store_max - ber_store_averages  # Distance from avg to max
+y_err = [y_err_lower, y_err_upper]  # Asymmetric error bars
 
 R1, L1, M1 = map(sparc_params.get,['R','L','M']) 
 R2, L2, M2 = map(sparc_ldpc_params.get,['R','L','M'])
 R3 = round(ldpc_params['int_rate'], 2)
-np.savez(f'performance_plot_arrays/Test_{test_num}_Power_{P}_sparc_R_{R1}_L_{L1}_M_{M1}_ldpc_Rs_{R2}_L_{L2}_M_{M2}_Rl_{R3}.npz', ber_store = ber_store_transpose, snr_store = snr_store)
+np.savez(f'performance_plot_arrays/Test_{test_num}_Power_{P}_sparc_R_{R1}_L_{L1}_M_{M1}_ldpc_Rs_{R2}_L_{L2}_M_{M2}_Rl_{R3}.npz', ber_store = ber_store_averages, snr_store = snr_store)
 
+
+# plt.figure(figsize=(15,4))
+# for s in range(num_sims): 
+#     plt.plot(snr_store, ber_store_transpose[s], marker='o', label=sims_labels[s])     
+# 
 
 plt.figure(figsize=(15,4))
-for s in range(num_sims): 
-    plt.plot(snr_store, ber_store_transpose[s], marker='o', label=sims_labels[s])
+for s in range(num_sims):
+    plt.errorbar(snr_store, ber_store_averages[s], yerr=[y_err_lower[s], y_err_upper[s]], 
+                 fmt='o-', capsize=4, label=sims_labels[s])   
 
 # Add title and labels
 plt.title('Line Plot of Bit Error Rate against SNR')

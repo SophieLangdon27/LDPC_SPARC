@@ -4,7 +4,7 @@
 
 // #define __DEBUG__
 
-# define MAX_ITCOUNT 200 // maximum number of iterations allowed for decoder
+// # define MAX_ITCOUNT 200 // maximum number of iterations allowed for decoder
 
 /* **********************************************************************
  *                                                                      *
@@ -30,7 +30,7 @@
  ********************************************************************** */
 
 int sumprod(double *ch, long *vdeg, long *cdeg, long *intrlv,
-	    int Nv, int Nc, int Nmsg, double *app)
+	    int Nv, int Nc, int Nmsg, double *app, int max_itcount)
 {
   double *msg;
   int j, k, imsg, stopflag, itcount;
@@ -43,7 +43,7 @@ int sumprod(double *ch, long *vdeg, long *cdeg, long *intrlv,
   
   // main loop, will iterate until stopping criterion is fulfilled
   // (see below) or up to MAX_ITCOUNT iterations. 
-  for (itcount = 0 ; itcount < MAX_ITCOUNT ; itcount++) {
+  for (itcount = 0 ; itcount < max_itcount ; itcount++) {
 
     /* *****************************
      * variable node rule ("sum")  *
@@ -136,7 +136,7 @@ double Lxor(double L1, double L2, int correction_flag); // LLR of XOR
 double Lxfb(double *L, long dc, int correction_flag); // extrinsic LLR
 
 int sumprod2(double *ch, long *vdeg, long *cdeg, long *intrlv,
-	     int Nv, int Nc, int Nmsg, double *app)
+	     int Nv, int Nc, int Nmsg, double *app, int max_itcount)
 {
   double *msg;
   int j, k, imsg, stopflag, itcount;
@@ -165,7 +165,7 @@ int sumprod2(double *ch, long *vdeg, long *cdeg, long *intrlv,
   if (msg == NULL)
     return(-1);
   
-  for (itcount = 0 ; itcount < MAX_ITCOUNT ; itcount++) {
+  for (itcount = 0 ; itcount < max_itcount ; itcount++) {
 
     // var node (identical to sumprod)
     for (j = 0, imsg = 0 ; j < Nv ; j++) { 
@@ -337,7 +337,7 @@ double Lxfb(double *L, long dc, int corr_flag)
  ********************************************************************** */
 
 int minsum(double *ch, long *vdeg, long *cdeg, long *intrlv,
-	   int Nv, int Nc, int Nmsg, double *app, double correction_factor)
+	   int Nv, int Nc, int Nmsg, double *app, double correction_factor, int max_itcount)
 {
   double *msg;
   int j, k, imsg, stopflag, itcount;
@@ -347,7 +347,7 @@ int minsum(double *ch, long *vdeg, long *cdeg, long *intrlv,
   if (msg == NULL)
     return(-1);
 
-  for (itcount = 0 ; itcount < MAX_ITCOUNT ; itcount++) {
+  for (itcount = 0 ; itcount < max_itcount ; itcount++) {
     // var node (identical to sumprod)
     for (j = 0, imsg = 0 ; j < Nv ; j++) { 
       for (k = 0, aggr = ch[j] ; k < vdeg[j] ; k++, imsg++) 

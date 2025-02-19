@@ -460,7 +460,7 @@ class code:
         return(np.reshape(x,-1))
 
                             
-    def decode(self, ch, dectype='sumprod2', corr_factor=0.7):
+    def decode(self, ch, max_itcount=200, dectype='sumprod2', corr_factor=0.7):
         vdeg = self.vdeg
         cdeg = self.cdeg
         intrlv = self.intrlv
@@ -480,9 +480,9 @@ class code:
         intrlv_p = self.intrlv.ctypes.data_as(ct.POINTER(ct.c_long))
         # call C function for the sum product algorithm
         if dectype == 'sumprod':
-            it = c_ldpc.sumprod(ch_p, vdeg_p, cdeg_p, intrlv_p, Nv, Nc, Nmsg, app_p)
+            it = c_ldpc.sumprod(ch_p, vdeg_p, cdeg_p, intrlv_p, Nv, Nc, Nmsg, app_p, max_itcount)
         elif dectype == 'sumprod2':
-            it = c_ldpc.sumprod2(ch_p, vdeg_p, cdeg_p, intrlv_p, Nv, Nc, Nmsg, app_p)
+            it = c_ldpc.sumprod2(ch_p, vdeg_p, cdeg_p, intrlv_p, Nv, Nc, Nmsg, app_p, max_itcount)
         elif dectype == 'minsum':
             it = c_ldpc.minsum(ch_p, vdeg_p, cdeg_p, intrlv_p, Nv, Nc, Nmsg, app_p, ct.c_double(corr_factor))
         else:

@@ -11,8 +11,8 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 import numpy as np 
-from sparc_sophie.sparc_sim_sophie import sparc_sim_sophie, sparc_ldpc_sim_sophie, sparc_ldpc_sim_sophie_re_run, sparc_ldpc_sim_integrated_wrong
-from param_calc import param_calc
+from sparc_sophie.sparc_sim_sophie import sparc_sim_sophie, sparc_ldpc_sim_sophie, sparc_ldpc_sim_sophie_re_run, sparc_ldpc_sim_integrated_wrong # type: ignore
+from param_calc import param_calc # type: ignore
 from ldpc_jossy.py.ldpc import code
 import matplotlib.pyplot as plt # type: ignore
 

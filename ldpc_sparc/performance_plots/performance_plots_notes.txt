@@ -39,3 +39,23 @@ Even with only using ldpc on the first section the ldpc + sparc still gives wors
 9. Re-running AMP with zeros for unprotected and correct ldpc 
 
 10. Re-running AMP for only when the ldpc codeword is correctly decoded. 
+
+
+
+NEW SECTION: 
+15. Just SPARC on its own compared with LDPC + SPARC for my report. Using similar values to Adams paper. Overall R = 0.8,
+k = 4860, M = 512 and 70% protected. 
+
+16. Re-running AMP tried again but still doesn't give waterfall result. Retiring for now. 
+
+UPDATED SPARC FUNCTIONS: 
+
+18. Testing SPARC on it's own with AMP works 
+
+
+
+NEW SPARC FUNCTIONS USED: 
+
+21. SPARC, SPARC + LDPC, NAIVE DECODER. This time the SPARC + LDPC decoder uses the normal 200 iterations but with the integrated
+one, the bp iterations is only 6. Does worse than when 200 was used in the integrated decoder -- BP must have done a lot of the heavy
+lifting before. I will want to test my code is fully correct tho. As it's giving the worst possible results (As if randomly picked).

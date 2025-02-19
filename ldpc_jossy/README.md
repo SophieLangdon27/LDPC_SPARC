@@ -1,18 +1,3 @@
-# Additional comments from Sophie
-The instructions below will not work for Windows. Additionally there 
-are some changes that are needed for the ldpc code due to outdated
-data types. The setup and changes are described in the white paper 
-made by Jeremias Pohle -- "Getting started with LDPC codes on Windows" 
-located in this repo. This specific ldpc_jossy package will only work 
-on my laptop as different changes are needed for each laptop but I have 
-committed it for backup purposes. To follow the instructions in the 
-white paper the original zip file must be used. 
-
-The numpy version is very important you may want to use a virtual environment, I have
-added a requirement.txt of all libraries needed with correct versions. 
-At the time of using this I used Python 3.12.0, pip 23.2.1, pytest 8.2.1 and numpy 1.26.1
-NOTE: It did not work with a more recent version of numpy!!!!!
-
 # ldpc
 This package contains an implementation of encoders and 
 decoders for the low-density parity-check (LDPC) codes

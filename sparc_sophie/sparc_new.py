@@ -14,7 +14,7 @@ def sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed):
     ''' 
     Encodes random message vector to an LDPC codeword then SPARC codeword.
     Note this is only for partially protected codes. 
-    '''
+    ''' #(Tested)
 
     # Calculated user bits length 
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
@@ -49,7 +49,7 @@ def sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed):
     sparc_params.update({'n':n, 'R_actual':R_actual})
 
     A = create_design_matrix(L, M, n, rand_seed) 
-    x = matrix_multiplication(A, beta0)
+    x = np.dot(A, beta0)
 
     return user_bits, beta0, x, A
 
@@ -74,7 +74,7 @@ def sparc_ldpc_decode(y, sparc_params, ldpc_params, decode_params, ldpc_bool, le
         unprotected_bits_out = msg_vector_2_bin_arr(unprotected, M)
 
         bp_probs = beta_estimate_to_bp_probs(protected_beta_estimate, L, M, sqrt_nP_l)
-        _, protected_bits_out = ldpc_bp(bp_probs, c, 0, True)
+        _, protected_bits_out = ldpc_bp(bp_probs, c, 200, True)
     
         bits_out = np.concatenate((unprotected_bits_out, protected_bits_out))
 
@@ -84,7 +84,7 @@ def sparc_ldpc_decode(y, sparc_params, ldpc_params, decode_params, ldpc_bool, le
 
     return bits_out
 
-def naively_integrated_decoder(y, sparc_params, ldpc_params, decode_params, awgn_var, rand_seed, beta0, lengths, A): 
+def naively_integrated_decoder(y, sparc_params, ldpc_params, decode_params, A): 
 
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
     n = len(y)
@@ -95,12 +95,16 @@ def naively_integrated_decoder(y, sparc_params, ldpc_params, decode_params, awgn
     # Initial AMP + BP
     beta = np.zeros(L*M)
     z = 0
+    tau_sqr = 1
     AT = A.T
     for i in range(t_max): 
         beta, z, tau_sqr = sparc_amp_single_run(sparc_params, y, A, AT, beta, z, tau_sqr)
         ldpc_probs = beta_estimate_to_bp_probs(beta, L, M, sqrt_nP_l)
-        ldpc_probs, hard_decision_bits = ldpc_bp(ldpc_probs, c, 0, False)
-        beta = bp_output_to_beta_estimate(ldpc_probs, L, M, sqrt_nP_l)
+        if (i != t_max-1): 
+            ldpc_probs, _ = ldpc_bp(ldpc_probs, c, 6, False)
+            beta = bp_output_to_beta_estimate(ldpc_probs, L, M, sqrt_nP_l)
+        else: 
+            _, hard_decision_bits = ldpc_bp(ldpc_probs, c, 6, True)
 
     return hard_decision_bits
 
@@ -109,7 +113,7 @@ def naively_integrated_decoder(y, sparc_params, ldpc_params, decode_params, awgn
 def sparc_amp(y, sparc_params, decode_params, A): 
     '''
     The normal AMP algorithm.
-    '''
+    ''' #(Tested)
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
     n = len(y)
     P_l = P / L
@@ -124,11 +128,11 @@ def sparc_amp(y, sparc_params, decode_params, A):
 
     for t in range(t_max): 
         if t > 0:
-            Ab = matrix_multiplication(A, beta)
+            Ab = np.dot(A, beta)
             Onsager = (z / tau_sqr) * (P - ((np.sum(beta ** 2))/n) )
             z = y - Ab + Onsager 
         
-        ATz = matrix_multiplication(AT, z)
+        ATz = np.dot(AT, z)
         s = beta + ATz
         tau_sqr = np.sum(z ** 2) / n 
         beta = msg_vector_mmse_estimator(s, tau_sqr, n, P_l, M)
@@ -136,15 +140,16 @@ def sparc_amp(y, sparc_params, decode_params, A):
     return beta, s 
 
 def sparc_amp_single_run(sparc_params, y, A, AT, beta, z, tau_sqr):
+    #(Tested)
 
     P, L, M = sparc_params['P'], sparc_params['L'], sparc_params['M']
     P_l = P/L
     n = len(y)
-    Ab = matrix_multiplication(A, beta)
+    Ab = np.dot(A, beta)
     Onsager = (z / tau_sqr) * (P - ((np.sum(beta ** 2))/n) )
     z = y - Ab + Onsager
 
-    ATz = matrix_multiplication(AT, z)
+    ATz = np.dot(AT, z)
     s = beta + ATz
     tau_sqr = np.sum(z ** 2) / n 
     beta = msg_vector_mmse_estimator(s, tau_sqr, n, P_l, M)
@@ -199,6 +204,7 @@ def msg_vector_map_estimator(s, M, sqrt_nP_l):
 def beta_estimate_to_bp_probs(beta, L, M, sqrt_nP_l): 
     '''
     Takes the posterior probabilities given by AMP (beta) and coverts to ldpc probs. 
+    Where the ldpc probs are the probabilites of that bit being a 0. 
     '''
     logM = int(np.log2(M))
     # Turns amp posterior probs into ldpc 
@@ -232,7 +238,7 @@ def ldpc_bp(ldpc_probs, c, num_runs, hard_decision_bool):
     app = []
     app_cut = []
     for chunk in LLR: 
-        decoded = c.decode(chunk)[0]    # Need to include num of runs here 
+        decoded = c.decode(chunk, num_runs)[0]
         app.append(decoded)
         app_cut.append(decoded[:c.K])
     app = np.array(app)
@@ -251,16 +257,22 @@ def ldpc_bp(ldpc_probs, c, num_runs, hard_decision_bool):
     return ldpc_probs, hard_decision_bits
 
 def bp_output_to_beta_estimate(ldpc_probs, L, M, sqrt_nP_l): 
+    '''
+    For beta estimate [0] being the non-zero we have the ldpc bits of all 1s. 
+    Therefore as the ldpc_probs are for it being a zero. We want to multiply (1-p) for all p.
+    To do this the beta index we are looking at is turned into a binary num and the p's are 
+    multiplied together accordingly. 
+    '''
 
     logM = int(np.log2(M))
     ldpc_probs_sectioned = ldpc_probs.reshape(L,logM)
     amp_probs = np.ones((L,M))
-    for l in range(L): #0
-        for i in range(M): #1
+    for l in range(L): 
+        for i in range(M): 
             binary_num = format(i,f"0{logM}b")
-            # The probability is the product of p if binary_num = 1 or (1-p) if binary_num = 0 
+            # The probability is the product of p if binary_num = 0 or (1-p) if binary_num = 1
             for j in range(logM): 
-                amp_probs[l][i] = amp_probs[l][i]*ldpc_probs_sectioned[l][j] if (binary_num[j] == '1') else amp_probs[l][i]*(1-ldpc_probs_sectioned[l][j])
+                amp_probs[l][i] = amp_probs[l][i]*ldpc_probs_sectioned[l][j] if (binary_num[j] == '0') else amp_probs[l][i]*(1-ldpc_probs_sectioned[l][j])
 
     amp_probs = amp_probs.reshape(L*M)
     return amp_probs * sqrt_nP_l
@@ -272,24 +284,13 @@ def create_design_matrix(L, M, n, rand_seed):
     ''' 
     Constructs the design matrix and functions to multiply 
     a vector by the matrix and its transpose. 
-    '''
+    ''' #(Tested)
+
     rng = np.random.default_rng(rand_seed) 
     ML = M * L 
     scale = 1/np.sqrt(n)
     A = rng.normal(loc=0, scale=scale, size=(n, ML))
     return A 
-
-def matrix_multiplication(A, x): 
-    assert A.ndim == 2 
-    assert x.ndim == 1
-    assert A.shape[1] == len(x)
-
-    # output = np.zeros(A.shape[0])
-    # for r in range(A.shape[0]): 
-    #     for c in range(A.shape[1]): 
-    #         output[r] += (A[r][c] * x[c])
-    
-    return np.dot(A, x)
 
 ######## Message vector operations ######## ----------------------------------------------------------------------------------------------------
 
@@ -298,7 +299,8 @@ def bin_arr_2_msg_vector(bin_arr, M, n, P_l):
     Convert binary array (numpy.ndarray) to SPARC message vector
 
     M: entries per section of SPARC message vector
-    '''
+    ''' #(Tested)
+
     logM = int(np.log2(M))
     bin_arr_size = bin_arr.size
     assert bin_arr_size % logM == 0
@@ -341,7 +343,8 @@ def encode_ldpc(user_bits, ldpc_params, mults, unprotected_bit_len):
     '''
     Takes user_bits in, seperates the unprotected bits, and encodes the 
     remaining bits, outputs both concatenated. 
-    '''
+    ''' #(Tested)
+
     c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
     ldpc_bits = user_bits[unprotected_bit_len:]
     unprotected_bits = user_bits[:unprotected_bit_len].astype(bool)
