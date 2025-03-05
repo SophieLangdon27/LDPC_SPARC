@@ -108,7 +108,94 @@ def naively_integrated_decoder(y, sparc_params, ldpc_params, decode_params, A):
 
     return hard_decision_bits
 
+
+def integrated_decoder(y, sparc_params, ldpc_params, decode_params, A): 
+
+    P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
+    n = len(y)
+    P_l = P/L
+    c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
+    t_max = decode_params['t_max']
+    num_runs = 6 
+
+    # Initial AMP + BP
+    beta = np.zeros(L*M)
+    z = 0
+    differentiated_eta = np.zeros(n)
+    AT = A.T
+    for t in range(t_max):  
+        if t != 0: 
+            differentiated_eta = differentiated_eta(beta, vk, vk_0, alpha, tau_sqr)
+        z = y - (np.dot(A, beta)) + z*(np.sum(differentiated_eta)/n)
+        s = np.dot(AT, z) + beta 
+        tau_sqr = np.sum(z ** 2) / n    
+        if (t != t_max-1):
+            hard_decision = False
+            alpha, vk_0, vk, beta, _ = eta(s, tau_sqr, n, P_l, M, L, c, num_runs, hard_decision)
+        else: 
+            hard_decision = True 
+            _, _, _, _, hard_decision_bits= eta(s, tau_sqr, n, P_l, M, L, c, num_runs, hard_decision)
+
+    return hard_decision_bits
+
+
+
+
 ######## AMP + BP decoder ######## --------------------------------------------------------------------------------------------------------------
+
+def eta(s, tau_sqr, n, P_l, M, L, c, num_runs, hard_decision_bool): 
+    
+    sqrt_nP_l = np.sqrt(n*P_l)
+
+    # Step One (Expectation): 
+    weighted_alpha = msg_vector_mmse_estimator(s, tau_sqr, n, P_l, M)
+    alpha = weighted_alpha/sqrt_nP_l
+
+    # Step Two (Conversion to codeword bit-wise probabilites): 
+    vk_0 = beta_estimate_to_bp_probs(weighted_alpha, L, M, sqrt_nP_l)
+
+    # Step Three (Belief Propagation): 
+    vk, hard_decision_bits = ldpc_bp(vk_0, c, num_runs, hard_decision_bool)
+
+    # Step Four (Conversion to beta section-wise probabilites): 
+    if hard_decision_bool: 
+        beta = np.zeros(L*M)
+    else: 
+        beta = bp_output_to_beta_estimate(vk, L, M, sqrt_nP_l)
+    
+    return alpha, vk_0, vk, beta, hard_decision_bits
+
+def differentiated_eta(beta, vk, vk_0, alpha, tau_sqr, L, M, S_k, n, P_l): 
+
+    logM = int(np.log2(M))
+    vk_sectioned = vk.reshape(L,logM)
+    main_term = np.zeros((L,M))
+    for l in range(L): 
+        for i in range(M): 
+            binary_num = format(i,f"0{logM}b")
+            # The probability is the product of p if binary_num = 0 or (1-p) if binary_num = 1
+            for k in range(logM): 
+                if (binary_num[k] == '0'): 
+                    main_term[l][i] -= vk_sectioned[l][k] * sub_term(vk_0, alpha, tau_sqr, l, k, i, S_k, n, P_l)
+                else: 
+                    main_term[l][i] += (1 - vk_sectioned[l][k]) * sub_term(vk_0, alpha, tau_sqr, l, k, i, S_k, n, P_l)
+
+    amp_probs = amp_probs.reshape(L*M)
+
+
+    return beta * main_term 
+
+def sub_term(vk_0, alpha, tau_sqr, l, k, i, S_k, n, P_l): 
+
+    sum_term = 0
+    q_to_sum_over = S_k[k]
+    for q in range(q_to_sum_over): 
+        if q == i: 
+            sum_term += alpha[l][q] * (np.sqrt(n*P_l)/tau_sqr) * (1 - alpha[l][q])
+        else: 
+            sum_term += alpha[l][q] * (np.sqrt(n*P_l)/tau_sqr) * (-alpha[l][q])
+        
+    return (1 / (vk_0[l][k] * (1 - vk_0[l][k]))) * sum_term
 
 def sparc_amp(y, sparc_params, decode_params, A): 
     '''
