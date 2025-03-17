@@ -108,7 +108,6 @@ def naively_integrated_decoder(y, sparc_params, ldpc_params, decode_params, A):
 
     return hard_decision_bits
 
-
 def integrated_decoder(y, sparc_params, ldpc_params, decode_params, A): 
 
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
@@ -117,85 +116,89 @@ def integrated_decoder(y, sparc_params, ldpc_params, decode_params, A):
     c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
     t_max = decode_params['t_max']
     num_runs = 6 
+    num_runs_final = 200
+    S_k = S_k_mapping(M)
 
-    # Initial AMP + BP
     beta = np.zeros(L*M)
     z = 0
     differentiated_eta = np.zeros(n)
     AT = A.T
     for t in range(t_max):  
         if t != 0: 
-            differentiated_eta = differentiated_eta(beta, vk, vk_0, alpha, tau_sqr)
+            differentiated_eta = differentiated_eta_calc(beta, vk, vk_0, alpha, tau_sqr, L, M, S_k, n, P_l)
         z = y - (np.dot(A, beta)) + z*(np.sum(differentiated_eta)/n)
         s = np.dot(AT, z) + beta 
         tau_sqr = np.sum(z ** 2) / n    
         if (t != t_max-1):
             hard_decision = False
-            alpha, vk_0, vk, beta, _ = eta(s, tau_sqr, n, P_l, M, L, c, num_runs, hard_decision)
+            alpha, vk_0, vk, beta, _ = eta(s, tau_sqr, n, P_l, M, L, c, num_runs, num_runs_final, hard_decision)
         else: 
             hard_decision = True 
-            _, _, _, _, hard_decision_bits= eta(s, tau_sqr, n, P_l, M, L, c, num_runs, hard_decision)
+            _, _, _, _, hard_decision_bits= eta(s, tau_sqr, n, P_l, M, L, c, num_runs, num_runs_final, hard_decision)
 
     return hard_decision_bits
 
 
-
-
 ######## AMP + BP decoder ######## --------------------------------------------------------------------------------------------------------------
 
-def eta(s, tau_sqr, n, P_l, M, L, c, num_runs, hard_decision_bool): 
-    
+def eta(s, tau_sqr, n, P_l, M, L, c, num_runs, num_runs_final, hard_decision_bool): 
+    #(Gone over)
     sqrt_nP_l = np.sqrt(n*P_l)
 
     # Step One (Expectation): 
     weighted_alpha = msg_vector_mmse_estimator(s, tau_sqr, n, P_l, M)
     alpha = weighted_alpha/sqrt_nP_l
+    assert len(weighted_alpha) == L*M
 
     # Step Two (Conversion to codeword bit-wise probabilites): 
     vk_0 = beta_estimate_to_bp_probs(weighted_alpha, L, M, sqrt_nP_l)
+    assert len(vk_0) == L * np.log2(M)
 
-    # Step Three (Belief Propagation): 
-    vk, hard_decision_bits = ldpc_bp(vk_0, c, num_runs, hard_decision_bool)
-
-    # Step Four (Conversion to beta section-wise probabilites): 
     if hard_decision_bool: 
+        # Step Three (Belief Propagation): 
+        vk, hard_decision_bits = ldpc_bp(vk_0, c, num_runs_final, hard_decision_bool)
+
+        # Step Four (Conversion to beta section-wise probabilites): 
         beta = np.zeros(L*M)
     else: 
+        # Step Three (Belief Propagation): 
+        vk, hard_decision_bits = ldpc_bp(vk_0, c, num_runs, hard_decision_bool)
+        # Step Four (Conversion to beta section-wise probabilites): 
         beta = bp_output_to_beta_estimate(vk, L, M, sqrt_nP_l)
+    assert len(beta) == L*M
     
     return alpha, vk_0, vk, beta, hard_decision_bits
 
-def differentiated_eta(beta, vk, vk_0, alpha, tau_sqr, L, M, S_k, n, P_l): 
-
+def differentiated_eta_calc(beta, vk, vk_0, alpha, tau_sqr, L, M, S_k, n, P_l): 
+    #(Gone over --- Seems to be taking really long)
     logM = int(np.log2(M))
     vk_sectioned = vk.reshape(L,logM)
+    alpha_sectioned = alpha.reshape(L,M)
     main_term = np.zeros((L,M))
     for l in range(L): 
         for i in range(M): 
             binary_num = format(i,f"0{logM}b")
-            # The probability is the product of p if binary_num = 0 or (1-p) if binary_num = 1
             for k in range(logM): 
                 if (binary_num[k] == '0'): 
-                    main_term[l][i] -= vk_sectioned[l][k] * sub_term(vk_0, alpha, tau_sqr, l, k, i, S_k, n, P_l)
+                    main_term[l][i] -= vk_sectioned[l][k] * sub_term(vk_0, alpha_sectioned, tau_sqr, l, k, i, S_k, n, P_l, L, M)
                 else: 
-                    main_term[l][i] += (1 - vk_sectioned[l][k]) * sub_term(vk_0, alpha, tau_sqr, l, k, i, S_k, n, P_l)
+                    main_term[l][i] += (1 - vk_sectioned[l][k]) * sub_term(vk_0, alpha_sectioned, tau_sqr, l, k, i, S_k, n, P_l, L, M)
 
-    amp_probs = amp_probs.reshape(L*M)
-
+    main_term = main_term.reshape(L*M)
 
     return beta * main_term 
 
-def sub_term(vk_0, alpha, tau_sqr, l, k, i, S_k, n, P_l): 
-
+def sub_term(vk_0, alpha_sectioned, tau_sqr, l, k, i, S_k, n, P_l, L, M): 
     sum_term = 0
     q_to_sum_over = S_k[k]
-    for q in range(q_to_sum_over): 
+    for q in q_to_sum_over: 
         if q == i: 
-            sum_term += alpha[l][q] * (np.sqrt(n*P_l)/tau_sqr) * (1 - alpha[l][q])
+            sum_term += alpha_sectioned[l][q] * (np.sqrt(n*P_l)/tau_sqr) * (1 - alpha_sectioned[l][q])
         else: 
-            sum_term += alpha[l][q] * (np.sqrt(n*P_l)/tau_sqr) * (-alpha[l][q])
+            sum_term += alpha_sectioned[l][q] * (np.sqrt(n*P_l)/tau_sqr) * (-alpha_sectioned[l][q])
         
-    return (1 / (vk_0[l][k] * (1 - vk_0[l][k]))) * sum_term
+    vk_0_sectioned = vk_0.reshape(L,int(np.log2(M)))
+    return (1 / (vk_0_sectioned[l][k] * (1 - vk_0_sectioned[l][k]))) * sum_term
 
 def sparc_amp(y, sparc_params, decode_params, A): 
     '''
@@ -309,6 +312,28 @@ def beta_estimate_to_bp_probs(beta, L, M, sqrt_nP_l):
     ldpc_probs = ldpc_probs.reshape(L*logM)
 
     return ldpc_probs
+
+def S_k_mapping(M): 
+    '''
+    Produces a list of logM lists, each of size 2^{logM-1}. Each list is the indicies of the non-zero
+    terms that correspond to the kth ldpc bit being a zero. 
+
+    E.g 0 -> 1  0
+        1 -> 0  1 
+        k -> q0 q1  So this would be [[0]]
+    '''
+
+    logM = int(np.log2(M))
+    S_k = [[] for _ in range(logM)]
+    for i in range(logM): 
+        b = logM - 1 - i
+        k = 0
+        while k < M: 
+            for j in range(k, k+pow(2,i)): 
+                S_k[b].append(j)
+            k = k + pow(2,i+1)
+
+    return S_k
 
 def ldpc_bp(ldpc_probs, c, num_runs, hard_decision_bool):
     '''
