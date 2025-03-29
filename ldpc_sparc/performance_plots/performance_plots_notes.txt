@@ -59,3 +59,15 @@ NEW SPARC FUNCTIONS USED:
 21. SPARC, SPARC + LDPC, NAIVE DECODER. This time the SPARC + LDPC decoder uses the normal 200 iterations but with the integrated
 one, the bp iterations is only 6. Does worse than when 200 was used in the integrated decoder -- BP must have done a lot of the heavy
 lifting before. I will want to test my code is fully correct tho. As it's giving the worst possible results (As if randomly picked).
+
+
+31. Uses a loop for AMP and BP 
+32. Similar with the naive decoder doing 200 iterations at the end
+33. Uses a loop for AMP and BP as before but now rather than outputting the bits from a hard decision from BP,
+the probabilities are calculated from the LLRs, it's converted back to a beta estimate and a hard decision is made from here. 
+(I assume the difference at a SNR around 3 is due to BP constantly starting and stopping with LLR values, I am really confused about
+this though.)
+
+
+35. Testing just AMP vs Integrated with no final BP. For normal AMP 25 iterations were used. For Integrated 100 iterations were
+used with BP iterations of 5. 

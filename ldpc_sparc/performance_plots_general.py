@@ -11,7 +11,7 @@ parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
 import numpy as np 
-from sparc_sophie.sparc_sim_new import sparc_ldpc_sim, sparc_ldpc_naive_sim
+from sparc_sophie.sparc_sim_new import sparc_ldpc_sim, sparc_ldpc_naive_sim, sparc_ldpc_integrated_sim, sparc_ldpc_sim_test, sparc_ldpc_no_bp, sparc_ldpc_integrated_no_bp
 from param_calc import param_calc
 from ldpc_jossy.py.ldpc import code
 import matplotlib.pyplot as plt # type: ignore
@@ -19,24 +19,25 @@ import matplotlib.pyplot as plt # type: ignore
 #CHANGE BELOW
 #-------------------------------------------------------------------------------------------------
 # Parameters
-num_sims    = 1
-# sims_labels = ['SPARC', 'SPARC+LDPC', 'SPARC+LDPC+RE_RUN', 'Naive_decoder']
-sims_labels = ['Naive_decoder']
+num_sims    = 2
+# sims_labels = ['SPARC', 'SPARC+LDPC', 'SPARC+LDPC+RE_RUN', 'Naive_decoder', 'Integrated_decoder']
+sims_labels = ['SPARC+LDPC+NO+BP', 'Integrated_decoder+NO+BP']
 
-test_num = 26
+test_num = 35
 decode_params = {'t_max': 25, 'rtol' : 1e-6}  # Maximum number of iterations
+decode_params_integrated = {'t_max': 50, 'rtol' : 1e-6}  # Maximum number of iterations
 num_of_runs   = 1             # Number of encoding/decoding trials
 num_snrs    = 5
-snr_start   = 1 
-snr_stop    = 20 
+snr_start   = 1
+snr_stop    = 5
 
 P = 19.44                   #15.0 
 R = 0.8
-mults = 3
+mults = 1
 percent_protected = 1.0 # 100%
 assert percent_protected >  0.0
 assert percent_protected <= 1.0
-M = 256
+M = 64
 standard = '802.11n'
 ldpc_rate = '5/6'
 int_rate = 5/6
@@ -83,9 +84,13 @@ for i in range(num_of_runs):
     rng_seed = rng.randint(0, 2**31-1, size=2).tolist()    # This generates two random integers, not sure why
     for v in range(num_snrs):  
         # _, _, ber_store[0][v][i] = sparc_ldpc_sim(sparc_params, ldpc_params, lengths, False, decode_params, awgn_var_store[v], rng_seed) 
-        # _, _, ber_store[1][v][i] = sparc_ldpc_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
-        _, _, ber_store[0][v][i] = sparc_ldpc_naive_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
-        # _, _, ber_store[2][v][i] = sparc_ldpc_sim_sophie_re_run(code_params_ldpc, ldpc_params, decode_params, awgn_var_store[v], lengths, rng_seed)
+        # _, _, ber_store[0][v][i] = sparc_ldpc_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        _, _, ber_store[0][v][i] = sparc_ldpc_no_bp(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        print("Half")
+        # _, _, ber_store[1][v][i] = sparc_ldpc_sim_test(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        # _, _, ber_store[2][v][i] = sparc_ldpc_naive_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        # _, _, ber_store[1][v][i] = sparc_ldpc_integrated_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params_integrated, awgn_var_store[v], rng_seed)
+        _, _, ber_store[1][v][i] = sparc_ldpc_integrated_no_bp(sparc_ldpc_params, ldpc_params, lengths, True, decode_params_integrated, awgn_var_store[v], rng_seed)
         print(f"Run {i+1}: Var {v+1}/{num_snrs}")
     
 # Average over runs for each variance

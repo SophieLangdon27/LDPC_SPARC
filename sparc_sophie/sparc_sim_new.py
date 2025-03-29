@@ -4,16 +4,29 @@ Returns bit error rates.
 '''
 
 import numpy as np
-from sparc_sophie.sparc_new import sparc_ldpc_encode, sparc_ldpc_decode, naively_integrated_decoder, integrated_decoder, bit_err_rate
+from sparc_sophie.sparc_new import sparc_ldpc_encode, sparc_ldpc_decode, sparc_ldpc_decode_test_2, naively_integrated_decoder, integrated_decoder, integrated_decoder_test, naively_integrated_test, bit_err_rate
 
 def sparc_ldpc_sim(sparc_params, ldpc_params, lengths, ldpc_bool, decode_params, awgn_var, rand_seed=None): 
     '''
     Simulated encoding, transmitting and decoding 
     '''
 
-    bits_i, beta0, x, A     = sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed)
+    bits_i, total_bits, beta0, x, A     = sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed)
     y                       = awgn_channel(x, awgn_var, rand_seed) # Produces the received vector after the channel 
     bits_o                  = sparc_ldpc_decode(y, sparc_params, ldpc_params, decode_params, ldpc_bool, lengths, A)
+                                        
+    ber = bit_err_rate(bits_i, bits_o)
+    
+    return bits_i, bits_o, ber
+
+def sparc_ldpc_sim_test(sparc_params, ldpc_params, lengths, ldpc_bool, decode_params, awgn_var, rand_seed=None): 
+    '''
+    Simulated encoding, transmitting and decoding 
+    '''
+
+    bits_i, total_bits, beta0, x, A     = sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed)
+    y                       = awgn_channel(x, awgn_var, rand_seed) # Produces the received vector after the channel 
+    bits_o                  = sparc_ldpc_decode_test_2(y, sparc_params, ldpc_params, decode_params, ldpc_bool, lengths, A)
                                         
     ber = bit_err_rate(bits_i, bits_o)
     
@@ -24,7 +37,7 @@ def sparc_ldpc_naive_sim(sparc_params, ldpc_params, lengths, ldpc_bool, decode_p
     Simulated encoding, transmitting and decoding 
     '''
 
-    bits_i, beta0, x, A     = sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed)
+    bits_i, total_bits, beta0, x, A     = sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed)
     y                       = awgn_channel(x, awgn_var, rand_seed) # Produces the received vector after the channel 
     bits_o                  = naively_integrated_decoder(y, sparc_params, ldpc_params, decode_params, A)
                                         
@@ -37,7 +50,7 @@ def sparc_ldpc_integrated_sim(sparc_params, ldpc_params, lengths, ldpc_bool, dec
     Simulated encoding, transmitting and decoding 
     '''
 
-    bits_i, beta0, x, A     = sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed)
+    bits_i, total_bits, beta0, x, A     = sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed)
     y                       = awgn_channel(x, awgn_var, rand_seed) # Produces the received vector after the channel 
     bits_o                  = integrated_decoder(y, sparc_params, ldpc_params, decode_params, A)
                                         
@@ -45,6 +58,25 @@ def sparc_ldpc_integrated_sim(sparc_params, ldpc_params, lengths, ldpc_bool, dec
     
     return bits_i, bits_o, ber
 
+def sparc_ldpc_no_bp(sparc_params, ldpc_params, lengths, ldpc_bool, decode_params, awgn_var, rand_seed=None): 
+    
+    bits_i, total_bits, beta0, x, A     = sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed)
+    y                       = awgn_channel(x, awgn_var, rand_seed) # Produces the received vector after the channel 
+    bits_o                  = sparc_ldpc_decode(y, sparc_params, ldpc_params, decode_params, False, lengths, A)
+                                        
+    ber = bit_err_rate(total_bits, bits_o)
+    
+    return bits_i, bits_o, ber
+
+def sparc_ldpc_integrated_no_bp(sparc_params, ldpc_params, lengths, ldpc_bool, decode_params, awgn_var, rand_seed=None): 
+    
+    bits_i, total_bits, beta0, x, A     = sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed)
+    y                       = awgn_channel(x, awgn_var, rand_seed) # Produces the received vector after the channel 
+    hard_decision_bits, ldpc_bits_out                  = naively_integrated_test(y, sparc_params, ldpc_params, decode_params, A)
+                                        
+    ber = bit_err_rate(total_bits, ldpc_bits_out)
+    
+    return bits_i, ldpc_bits_out, ber
 
 ######## Channel models ########
 
