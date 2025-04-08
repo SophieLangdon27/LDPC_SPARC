@@ -8,7 +8,27 @@ sys.path.append(parent_dir)
 import numpy as np
 from ldpc_jossy.py.ldpc import code 
 
-def param_calc(R, mults, percent_protected, M, standard, ldpc_rate, int_rate, z): 
+def param_calc(mults, logM, standard, ldpc_rate, int_rate, z, R_sparc_ldpc):
+      c = code(standard, ldpc_rate, z)
+      k = c.K * mults 
+      ldpc_bits_len = k / int_rate
+      assert ldpc_bits_len % 1 == 0, "ldpc_bits_len must be an integer"
+      ldpc_bits_len = int(ldpc_bits_len)
+      assert k % logM == 0 
+      assert ldpc_bits_len % logM == 0 
+      n = int(ldpc_bits_len / R_sparc_ldpc) 
+      overall_rate = k / n # Note this will be close to R_ldpc x R_sparc
+      L_sparc = int(k / logM)
+      L_sparc_ldpc = int(ldpc_bits_len / logM)
+
+      lengths = { 'k_ldpc' : k, 
+                  'mults'  : mults,
+                  'L_unprotected' : 0}
+
+      return overall_rate, L_sparc, L_sparc_ldpc, lengths
+
+
+def param_calc_semi_protected(R, mults, percent_protected, M, standard, ldpc_rate, int_rate, z): 
       c = code(standard, ldpc_rate, z)
       logM = np.log2(M)
       k_ldpc = c.K * mults 
@@ -31,12 +51,9 @@ def param_calc(R, mults, percent_protected, M, standard, ldpc_rate, int_rate, z)
       L_sparc = int(k // logM) # Integer division finds the multiples of logM in k so that k_sparc is roughly the same. 
       R_sparc_ldpc = L_sparc_ldpc_logM / n
 
-      lengths = { 'cK' : c.K,
-                  'k_ldpc' : k_ldpc, 
-                  'n_ldpc' : n_ldpc,
+      lengths = { 'k_ldpc' : k_ldpc,
                   'mults'  : mults,
-                  'L_unprotected' : L_unprotected, 
-                  'L_ldpc' : L_ldpc}
+                  'L_unprotected' : L_unprotected}
 
       return L_sparc, R_sparc_ldpc, L_sparc_ldpc, lengths, updated_rate
 

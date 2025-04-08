@@ -12,43 +12,62 @@ sys.path.append(parent_dir)
 
 import numpy as np 
 from sparc_sophie.sparc_sim_new import sparc_ldpc_sim, sparc_ldpc_naive_sim, sparc_ldpc_integrated_sim, sparc_ldpc_sim_test, sparc_ldpc_no_bp, sparc_ldpc_integrated_no_bp
-from param_calc import param_calc
+from param_calc import param_calc, param_calc_semi_protected
 from ldpc_jossy.py.ldpc import code
 import matplotlib.pyplot as plt # type: ignore
 
 #CHANGE BELOW
 #-------------------------------------------------------------------------------------------------
-# Parameters
-num_sims    = 2
+num_sims    = 3
 # sims_labels = ['SPARC', 'SPARC+LDPC', 'SPARC+LDPC+RE_RUN', 'Naive_decoder', 'Integrated_decoder']
-sims_labels = ['SPARC+LDPC+NO+BP', 'Integrated_decoder+NO+BP']
+sims_labels = ['SPARC', 'SPARC+LDPC', 'SPARC+LDPC+NO+BP']
 
-test_num = 35
-decode_params = {'t_max': 25, 'rtol' : 1e-6}  # Maximum number of iterations
-decode_params_integrated = {'t_max': 50, 'rtol' : 1e-6}  # Maximum number of iterations
-num_of_runs   = 1             # Number of encoding/decoding trials
-num_snrs    = 5
+test_num = 1
+decode_params = {'t_max': 25}  
+decode_params_integrated = {'t_max': 50}  
+num_of_runs   = 5             
+num_snrs    = 10
 snr_start   = 1
 snr_stop    = 5
+semi_protected = False 
 
-P = 19.44                   #15.0 
-R = 0.8
-mults = 1
-percent_protected = 1.0 # 100%
-assert percent_protected >  0.0
-assert percent_protected <= 1.0
-M = 64
-standard = '802.11n'
-ldpc_rate = '5/6'
-int_rate = 5/6
-z = 81
+if (semi_protected == False): 
+    # Assume the same length user bits is used for all sims
+    P = 19.44                   
+    standard = '802.11n'
+    ldpc_rate = '5/6'
+    int_rate = 5/6
+    z = 81
+
+    mults = 3                   # k = 1620 * mults with 5/6 and 81 params
+    logM = 6
+    M = pow(2, logM)
+    R_sparc_ldpc = 1
+    overall_rate, L_sparc, L_sparc_ldpc, lengths = param_calc(mults, logM, standard, ldpc_rate, int_rate, z, R_sparc_ldpc)
+
+
+else: 
+    P = 19.44                   
+    R = 0.8
+    mults = 3                   # k = 1620 * mults with these params 
+    logM = 6
+    M = pow(2, logM)
+
+    percent_protected = 1.0 # 100%
+    assert percent_protected >  0.0
+    assert percent_protected <= 1.0
+    standard = '802.11n'
+    ldpc_rate = '5/6'
+    int_rate = 5/6
+    z = 81
+    L_sparc, R_sparc_ldpc, L_sparc_ldpc, lengths, overall_rate = param_calc_semi_protected(R, mults, percent_protected, M, standard, 
+                                                                            ldpc_rate, int_rate, z)
+
 #---------------------------------------------------------------------------------------------------
 
-L_sparc, R_sparc_ldpc, L_sparc_ldpc, lengths, updated_rate = param_calc(R, mults, percent_protected, M, standard, ldpc_rate, int_rate, z)
-print(lengths)
 
 sparc_params        = { 'P': P,      # Average codeword symbol power constraint
-                        'R': updated_rate,       # Rate
+                        'R': overall_rate,       # Rate
                         'L': L_sparc,       # Number of sections
                         'M': M}       # Columns per section
 sparc_ldpc_params   = { 'P': P,      # Average codeword symbol power constraint
@@ -68,9 +87,6 @@ rng = np.random.RandomState(seed=None) # Random number generator
 ber_store = []
 for i in range(num_sims): 
     ber_store.append(np.zeros((num_snrs, num_of_runs)))
-# ber_store_averages = np.zeros((num_snrs, num_sims))
-# ber_store_max = np.zeros((num_snrs, num_sims))
-# ber_store_min = np.zeros((num_snrs, num_sims))
 
 ber_store_averages = np.zeros((num_sims, num_snrs))
 ber_store_max = np.zeros((num_sims, num_snrs))
@@ -84,13 +100,12 @@ for i in range(num_of_runs):
     rng_seed = rng.randint(0, 2**31-1, size=2).tolist()    # This generates two random integers, not sure why
     for v in range(num_snrs):  
         # _, _, ber_store[0][v][i] = sparc_ldpc_sim(sparc_params, ldpc_params, lengths, False, decode_params, awgn_var_store[v], rng_seed) 
-        # _, _, ber_store[0][v][i] = sparc_ldpc_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
-        _, _, ber_store[0][v][i] = sparc_ldpc_no_bp(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
-        print("Half")
+        _, _, ber_store[0][v][i] = sparc_ldpc_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        _, _, ber_store[1][v][i] = sparc_ldpc_no_bp(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
         # _, _, ber_store[1][v][i] = sparc_ldpc_sim_test(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
         # _, _, ber_store[2][v][i] = sparc_ldpc_naive_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
         # _, _, ber_store[1][v][i] = sparc_ldpc_integrated_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params_integrated, awgn_var_store[v], rng_seed)
-        _, _, ber_store[1][v][i] = sparc_ldpc_integrated_no_bp(sparc_ldpc_params, ldpc_params, lengths, True, decode_params_integrated, awgn_var_store[v], rng_seed)
+        # _, _, ber_store[1][v][i] = sparc_ldpc_integrated_no_bp(sparc_ldpc_params, ldpc_params, lengths, True, decode_params_integrated, awgn_var_store[v], rng_seed)
         print(f"Run {i+1}: Var {v+1}/{num_snrs}")
     
 # Average over runs for each variance
@@ -100,15 +115,6 @@ for s in range(num_sims):
         ber_store_max[s][j] = np.max(ber_store[s][j])
         ber_store_min[s][j] = np.min(ber_store[s][j])
 
-
-# for j in range(num_snrs): 
-#     for s in range(num_sims): 
-#         ber_store_averages[j][s] = np.mean(ber_store[s][j])
-#         ber_store_max[j][s] = np.max(ber_store[s][j])
-#         ber_store_min[j][s] = np.min(ber_store[s][j])
-
-# ber_store_transpose = ber_store_averages.T
-
 # Compute error bars
 y_err_lower = ber_store_averages - ber_store_min  # Distance from avg to min
 y_err_upper = ber_store_max - ber_store_averages  # Distance from avg to max
@@ -117,13 +123,8 @@ y_err = [y_err_lower, y_err_upper]  # Asymmetric error bars
 R1, L1, M1 = map(sparc_params.get,['R','L','M']) 
 R2, L2, M2 = map(sparc_ldpc_params.get,['R','L','M'])
 R3 = round(ldpc_params['int_rate'], 2)
-np.savez(f'performance_plot_arrays/Test_{test_num}_Power_{P}_sparc_R_{R1}_L_{L1}_M_{M1}_ldpc_Rs_{R2}_L_{L2}_M_{M2}_Rl_{R3}.npz', ber_store = ber_store_averages, snr_store = snr_store)
-
-
-# plt.figure(figsize=(15,4))
-# for s in range(num_sims): 
-#     plt.plot(snr_store, ber_store_transpose[s], marker='o', label=sims_labels[s])     
-# 
+np.savez(f'performance_plot_arrays/Test_{test_num}.npz', ber_store_averages = ber_store_averages,
+          ber_store_max = ber_store_max, ber_store_min = ber_store_min, snr_store = snr_store)
 
 plt.figure(figsize=(15,4))
 for s in range(num_sims):
@@ -138,5 +139,5 @@ plt.legend()  # Show legend
 
 # Show the plot
 plt.tight_layout()
-plt.savefig(f'performance_plots/Test_{test_num}_Power_{P}_sparc_R_{R1}_L_{L1}_M_{M1}_ldpc_Rs_{R2}_L_{L2}_M_{M2}_Rl_{R3}.png')
+plt.savefig(f'performance_plots/Test_{test_num}.png')
 plt.show()

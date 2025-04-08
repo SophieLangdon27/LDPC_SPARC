@@ -1,4 +1,4 @@
 venv/
 __pycache__/
-ldpc_sparc/performance_plot_arrays
-ldpc_sparc/performance_plots
+_legacy/performance_plot_arrays
+_legacy/performance_plots/Test*
