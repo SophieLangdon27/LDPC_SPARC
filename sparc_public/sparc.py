@@ -98,7 +98,7 @@ def check_code_params(code_params):
             code_params[item] = False # default
         else:
             assert type(code_params[item]) == bool,\
-                    "'{}' must be boolean".format(key)
+                    "'{}' must be boolean".format(key) # type: ignore
         code_params_copy[item] = copy(code_params[item])
 
     # Required SPARC code parameters (all SPARC types)
