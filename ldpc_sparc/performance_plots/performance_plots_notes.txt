@@ -1,0 +1,50 @@
+Tests: 
+1. Uses functions sparc_ldpc_decode and sparc_ldpc_decode_test. LDPC and SPARC is used for encoding. sparc_ldpc_decode uses the normal
+AMP and BP functions. sparc_ldpc_decode_test uses sparc_amp_single_run in a loop and splits bp into loops of 5 iterations each. 
+Parameters: 5 Runs for each SNR, P = 19.44, ldpc_rate = 5/6, k = 3 * 1620, logM = 6, sparc_rate = 1, n = 5832
+Interpretation: Very similar as aimed for, slight difference most likely due to BP working slightly differently in a loop, we have 
+wrongly sent messages to checks using information received from that check node. 
+
+2. Uses functions sparc_ldpc_decode and sparc_ldpc_decode_test_3. test_3 doesn't use BP, instead uses the fact it's systematic to
+extract the user bits. This should show the impact BP has. 
+Parameters: 5 Runs for each SNR, P = 19.44, ldpc_rate = 5/6, k = 3 * 1620, logM = 6, sparc_rate = 1, n = 5832
+Interpretation: BP is working (I have also tested BP using normal encoding which seemed to produce better results for higher BERs and 
+tested the individual functions). It just seems to only help decode for small error rates. Changing paramaters therefore might have an
+effect on its performance. 
+
+3. Again comparing using BP and no BP. Previously all tests used Standard =  802.11n, Rate = 5/6, z = 81, c.K = 1620 
+New LDPC parameters: Standard = '802.16', Rate = 1/2, z = 500, c.K = 6000 = k, logM = 6, sparc_rate = 1, n = 12000
+Interpretation: As expected BP has a much clearer effect when LDPC has a lower rate. This however widens the gap between performance
+of this against the pure sparc code due to worsened rate. 
+
+4. The same SPARC+LDPC code as above with an additional plot for the naive decoder. The naive decoder has BP iterations of 6 in 
+each AMP iteration (25 AMP iterations) and a final BP of 200 iterations. The parameters are the same as test 3. 
+Interpretation: The naive decoder doesn't seem to be improving the performance. 
+
+5. Trying to see if there is any point where the naive decoder reaches a negligible error rate. Large span of SNRs (7 - 100) for just the naive
+decoder with the same parameters as above. 
+
+6. Same test as 5 but for the integrated decoder - correct Onsager term. NOTE THE LABEL IS WRONG. 
+Interpretation: BER barely changes, possible the number of AMP iterations is too many (50 AMP iterations were used)? 
+
+7. All 4 plots over a sensible SNR range. 
+Parameters: AMP_it = 25, 3 runs for each SNR, ldpc_rate = 1/2, standard = 802.16, z = 150, c.K = 1800, sparc_rate = 1, 
+n = 3600, logM = 3 
+
+8. The same test as 7 but for an ldpc_rate of 5/6 and a sparc rate of 3/5 to keep the same overall rate a higher ldpc rate. 
+Same k = 1800 (z=90) and n due to the overall rate = 1/2. 
+Interpretation: The 'correct' decoder is clearly not working as expected, even the naive deoder is improving on the no bp plot.
+Notice the naive decoder only improves on the no bp plot for these conditions - i.e when ldpc has less of an impact on the 
+encoding/ decoding. So possibly bp is messing up initial amp iterations?
+
+9. A test to inspect if BP was making the estimate worse after BP due to high error rates. Same parameters as test 7 but just
+plots the BER within the first AMP iteration before and after BP. 
+
+10. A test to see the effect of the BP for within more iterations of AMP. Same as test 9 but now for 3 AMP iterations. 
+Interpretation: BP seems to be working quite well. We might want to do a similar test with the mmse estimator stage using 
+just the sparc to prove it's working as expected too. 
+
+11. Same test as 10 but now rather than the first 3 AMP iterations is from iteration 11 - 13.
+Interpretation: It seems that BP is having the desired affect but the AMP is bringing the BER rate up every time so it can't
+have an overall improvement - could this be happening due to the Onsager term not correctly removing the dependencies. 
+

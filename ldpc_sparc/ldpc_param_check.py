@@ -7,9 +7,9 @@ sys.path.append(parent_dir)
 
 from ldpc_jossy.py.ldpc import code 
 
-standard = '802.11n'
+standard = '802.16'
 ldpc_rate = '5/6'
-z = 81
+z = 90
 
 c = code(standard, ldpc_rate, z)
 print("c.K: ", c.K)

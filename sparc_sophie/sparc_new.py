@@ -9,12 +9,13 @@ import numpy as np
 from ldpc_jossy.py.ldpc import code 
 
 ### Main encode/decode functions -------------------------------------------------------------------------------------------------------------
+''' Each function is either an decode or a test. Tests either have the same functionality with different code to prove correctness
+    or outputs an additional object like a probe. They have been copied from a decode func so not to change the original code. '''
 
 def sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed): 
     ''' 
     Encodes random message vector to an LDPC codeword then SPARC codeword.
-    Note this is only for partially protected codes. 
-    ''' #(Tested)
+    ''' 
 
     # Calculated user bits length 
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
@@ -40,13 +41,9 @@ def sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed):
     assert encoded_bit_len == L*logM
 
     # Convert bits to message vector
-    n = int(round(encoded_bit_len/R))
+    n = int(encoded_bit_len/R)
     P_l = P/L
     beta0 = bin_arr_2_msg_vector(total_bits, M, n, P_l)
-
-    # Update code_params
-    R_actual = encoded_bit_len / n      # Actual rate
-    sparc_params.update({'n':n, 'R_actual':R_actual})
 
     A = create_design_matrix(L, M, n, rand_seed) 
     x = np.dot(A, beta0)
@@ -55,7 +52,7 @@ def sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed):
 
 def sparc_ldpc_decode(y, sparc_params, ldpc_params, decode_params, ldpc_bool, lengths, A):
     '''
-    Decodes using AMP fully then BP fully.
+    Decodes using AMP fully then BP fully if LDPC.
     '''
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
     n = len(y)
@@ -66,7 +63,7 @@ def sparc_ldpc_decode(y, sparc_params, ldpc_params, decode_params, ldpc_bool, le
     
     if (ldpc_bool): 
         c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
-        L_unprotected, L_ldpc = map(lengths.get,['L_unprotected','L_ldpc'])
+        L_unprotected = lengths['L_unprotected']
         unprotected_sparse_len = int(L_unprotected*M)
         protected_beta_estimate   = beta_soft_estimate[unprotected_sparse_len:]
 
@@ -84,7 +81,11 @@ def sparc_ldpc_decode(y, sparc_params, ldpc_params, decode_params, ldpc_bool, le
 
     return bits_out
 
-def sparc_ldpc_decode_test(y, sparc_params, ldpc_params, decode_params, ldpc_bool, lengths, A):
+def sparc_ldpc_decode_test(y, sparc_params, ldpc_params, decode_params, ldpc_bool, A):
+    '''
+    Does the exact same function as sparc_ldpc_decode but with the sparc_amp_single_it in a loop
+    and ldpc_bp split into loops of 5 iterations.
+    '''
 
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
     n = len(y)
@@ -100,7 +101,7 @@ def sparc_ldpc_decode_test(y, sparc_params, ldpc_params, decode_params, ldpc_boo
     AT = A.T
 
     for i in range(t_max): 
-        beta, z, tau_sqr = sparc_amp_single_run(sparc_params, y, A, AT, beta, z, tau_sqr)
+        beta, z, tau_sqr = sparc_amp_single_it(sparc_params, y, A, AT, beta, z, tau_sqr)
 
     # BP 
     ldpc_probs = beta_estimate_to_bp_probs(beta, L, M, sqrt_nP_l)
@@ -126,9 +127,10 @@ def sparc_ldpc_decode_test(y, sparc_params, ldpc_params, decode_params, ldpc_boo
 
     return hard_decision_bits
 
-def sparc_ldpc_decode_test_2(y, sparc_params, ldpc_params, decode_params, ldpc_bool, lengths, A):
+def sparc_ldpc_decode_test_2(y, sparc_params, ldpc_params, decode_params, ldpc_bool, A):
     '''
-    Attempt to make it more similar to the normal naively integrated one. 
+    Attempt to make it more similar to the normal naively integrated one. Similar to sparc_ldpc_decode_test, has a loop for
+    amp_single_it and for bp but takes the soft bp output turns into a beta estimate and decides the user bits from here. 
     '''
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
     n = len(y)
@@ -144,7 +146,7 @@ def sparc_ldpc_decode_test_2(y, sparc_params, ldpc_params, decode_params, ldpc_b
     AT = A.T
 
     for i in range(t_max): 
-        beta, z, tau_sqr = sparc_amp_single_run(sparc_params, y, A, AT, beta, z, tau_sqr)
+        beta, z, tau_sqr = sparc_amp_single_it(sparc_params, y, A, AT, beta, z, tau_sqr)
 
     # BP 
     ldpc_probs = beta_estimate_to_bp_probs(beta, L, M, sqrt_nP_l)
@@ -175,7 +177,29 @@ def sparc_ldpc_decode_test_2(y, sparc_params, ldpc_params, decode_params, ldpc_b
 
     return bits_out
 
+def sparc_ldpc_decode_test_3(y, sparc_params, ldpc_params, decode_params, ldpc_bool, A): 
+    '''
+    Same as sparc_ldpc_decode but also does no BP, it just uses the fact that the ldpc code is systematic.
+    '''
+    P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
+    n = len(y)
+    sqrt_nP_l = np.sqrt(n * (P/L))
+
+    # Run AMP fully 
+    beta_soft_estimate, s = sparc_amp(y, sparc_params, decode_params, A)
+    
+    c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
+
+    bp_probs = beta_estimate_to_bp_probs(beta_soft_estimate, L, M, sqrt_nP_l)
+    _, bits_out, no_bp_bits = ldpc_bp_test(bp_probs, c, 200, True)
+
+
+    return bits_out, no_bp_bits
+
 def naively_integrated_decoder(y, sparc_params, ldpc_params, decode_params, A): 
+    '''
+    Aims to combine AMP with BP. AMP single iteration followed by x bp iterations i times. Finished by f bp iterations.
+    '''
 
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
     n = len(y)
@@ -189,10 +213,10 @@ def naively_integrated_decoder(y, sparc_params, ldpc_params, decode_params, A):
     tau_sqr = 1
     AT = A.T
     for i in range(t_max): 
-        beta, z, tau_sqr = sparc_amp_single_run(sparc_params, y, A, AT, beta, z, tau_sqr)
+        beta, z, tau_sqr = sparc_amp_single_it(sparc_params, y, A, AT, beta, z, tau_sqr)
         ldpc_probs = beta_estimate_to_bp_probs(beta, L, M, sqrt_nP_l)
         if (i != t_max-1): 
-            ldpc_probs, _ = ldpc_bp(ldpc_probs, c, 10, False)
+            ldpc_probs, _ = ldpc_bp(ldpc_probs, c, 6, False)
             beta = bp_output_to_beta_estimate(ldpc_probs, L, M, sqrt_nP_l)
         else: 
             _, hard_decision_bits = ldpc_bp(ldpc_probs, c, 200, True)
@@ -200,7 +224,10 @@ def naively_integrated_decoder(y, sparc_params, ldpc_params, decode_params, A):
     return hard_decision_bits
 
 def naively_integrated_test(y, sparc_params, ldpc_params, decode_params, A): 
-
+    '''
+    Originally only the decided user bits are given, here there is also the option of no final round of BP, the beta estimate is
+    used to decode and produce the ldpc bits. 
+    '''
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
     n = len(y)
     sqrt_nP_l = np.sqrt(n * (P/L))
@@ -213,28 +240,64 @@ def naively_integrated_test(y, sparc_params, ldpc_params, decode_params, A):
     tau_sqr = 1
     AT = A.T
     for i in range(t_max): 
-        beta, z, tau_sqr = sparc_amp_single_run(sparc_params, y, A, AT, beta, z, tau_sqr)
+        beta, z, tau_sqr = sparc_amp_single_it(sparc_params, y, A, AT, beta, z, tau_sqr)
         ldpc_probs = beta_estimate_to_bp_probs(beta, L, M, sqrt_nP_l)
         if (i != t_max-1): 
             ldpc_probs, _ = ldpc_bp(ldpc_probs, c, 5, False)
             beta = bp_output_to_beta_estimate(ldpc_probs, L, M, sqrt_nP_l)
         else: 
-            _, hard_decision_bits = ldpc_bp(ldpc_probs, c, 5, True)
+            _, hard_decision_bits = ldpc_bp(ldpc_probs, c, 200, True)
 
     beta_decision = msg_vector_map_estimator(beta, M, sqrt_nP_l)
     ldpc_bits_out = msg_vector_2_bin_arr(beta_decision, M)
 
     return hard_decision_bits, ldpc_bits_out
 
-def integrated_decoder(y, sparc_params, ldpc_params, decode_params, A): 
+def naively_integrated_test_2(y, sparc_params, ldpc_params, decode_params, lengths, A):
+    '''
+    Outputs the BER before and after BP in specified iterations of AMP.
+    '''
+    P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
+    n = len(y)
+    sqrt_nP_l = np.sqrt(n * (P/L))
+    c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])   
+    t_max = decode_params['t_max']
 
+    mults = lengths['mults']
+    user_bits_len = c.K * mults
+    decoded_user_bits_arr = np.zeros((t_max*2,user_bits_len))
+
+    # Initial AMP + BP
+    beta = np.zeros(L*M)
+    z = 0
+    tau_sqr = 1
+    AT = A.T
+    store_idx = 0
+    for i in range(t_max): 
+        beta, z, tau_sqr = sparc_amp_single_it(sparc_params, y, A, AT, beta, z, tau_sqr)
+        ldpc_probs = beta_estimate_to_bp_probs(beta, L, M, sqrt_nP_l)
+        if i in [10,11,12]: 
+            decoded_user_bits_arr[store_idx] = ldpc_probs_to_user_bits(ldpc_probs, c)
+            store_idx += 1
+        ldpc_probs, _ = ldpc_bp(ldpc_probs, c, 6, False)
+        if i in [10,11,12]:
+            decoded_user_bits_arr[store_idx] = ldpc_probs_to_user_bits(ldpc_probs, c)
+            store_idx += 1
+        beta = bp_output_to_beta_estimate(ldpc_probs, L, M, sqrt_nP_l)
+
+    return decoded_user_bits_arr
+
+def integrated_decoder(y, sparc_params, ldpc_params, decode_params, A): 
+    '''
+    Integrated the decoders but with the updated formula. 
+    '''
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
     n = len(y)
     P_l = P/L
     c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
     t_max = decode_params['t_max']
-    num_runs = 5
-    num_runs_final = 200
+    num_its = 5
+    num_its_final = 200
     S_k = S_k_mapping(M)
 
     beta = np.zeros(L*M)
@@ -249,23 +312,26 @@ def integrated_decoder(y, sparc_params, ldpc_params, decode_params, A):
         tau_sqr = np.sum(z ** 2) / n    
         if (t != t_max-1):
             hard_decision = False
-            alpha, vk_0, vk, beta, _ = eta(s, tau_sqr, n, P_l, M, L, c, num_runs, num_runs_final, hard_decision)
+            alpha, vk_0, vk, beta, _ = eta(s, tau_sqr, n, P_l, M, L, c, num_its, num_its_final, hard_decision)
         else: 
             hard_decision = True 
-            _, _, _, _, hard_decision_bits= eta(s, tau_sqr, n, P_l, M, L, c, num_runs, num_runs_final, hard_decision)
+            _, _, _, _, hard_decision_bits= eta(s, tau_sqr, n, P_l, M, L, c, num_its, num_its_final, hard_decision)
 
     return hard_decision_bits
 
 def integrated_decoder_test(y, sparc_params, ldpc_params, decode_params, A): 
-
+    '''
+    Same as naively_integrated_test, this function also has the option of skipping final BP and using the beta estimate
+    to get the decoded ldpc_bits. 
+    '''
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
     n = len(y)
     P_l = P/L
     sqrt_nP_l = np.sqrt(n*P_l)
     c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
     t_max = decode_params['t_max']
-    num_runs = 5
-    num_runs_final = 5
+    num_its = 5
+    num_its_final = 5
     S_k = S_k_mapping(M)
 
     beta = np.zeros(L*M)
@@ -280,10 +346,10 @@ def integrated_decoder_test(y, sparc_params, ldpc_params, decode_params, A):
         tau_sqr = np.sum(z ** 2) / n    
         if (t != t_max-1):
             hard_decision = False
-            alpha, vk_0, vk, beta, _ = eta(s, tau_sqr, n, P_l, M, L, c, num_runs, num_runs_final, hard_decision)
+            alpha, vk_0, vk, beta, _ = eta(s, tau_sqr, n, P_l, M, L, c, num_its, num_its_final, hard_decision)
         else: 
             hard_decision = True 
-            _, _, _, _, hard_decision_bits= eta(s, tau_sqr, n, P_l, M, L, c, num_runs, num_runs_final, hard_decision)
+            _, _, _, _, hard_decision_bits= eta(s, tau_sqr, n, P_l, M, L, c, num_its, num_its_final, hard_decision)
 
     beta_decision = msg_vector_map_estimator(beta, M, sqrt_nP_l)
     ldpc_bits_out = msg_vector_2_bin_arr(beta_decision, M)
@@ -293,7 +359,7 @@ def integrated_decoder_test(y, sparc_params, ldpc_params, decode_params, A):
 
 ######## AMP + BP decoder ######## --------------------------------------------------------------------------------------------------------------
 
-def eta(s, tau_sqr, n, P_l, M, L, c, num_runs, num_runs_final, hard_decision_bool): 
+def eta(s, tau_sqr, n, P_l, M, L, c, num_its, num_its_final, hard_decision_bool): 
     #(Gone over)
     sqrt_nP_l = np.sqrt(n*P_l)
 
@@ -308,13 +374,13 @@ def eta(s, tau_sqr, n, P_l, M, L, c, num_runs, num_runs_final, hard_decision_boo
 
     if hard_decision_bool: 
         # Step Three (Belief Propagation): 
-        vk, hard_decision_bits = ldpc_bp(vk_0, c, num_runs_final, hard_decision_bool)
+        vk, hard_decision_bits = ldpc_bp(vk_0, c, num_its_final, hard_decision_bool)
 
         # Step Four (Conversion to beta section-wise probabilites): 
         beta = np.zeros(L*M)
     else: 
         # Step Three (Belief Propagation): 
-        vk, hard_decision_bits = ldpc_bp(vk_0, c, num_runs, hard_decision_bool)
+        vk, hard_decision_bits = ldpc_bp(vk_0, c, num_its, hard_decision_bool)
         # Step Four (Conversion to beta section-wise probabilites): 
         beta = bp_output_to_beta_estimate(vk, L, M, sqrt_nP_l)
     assert len(beta) == L*M
@@ -361,7 +427,7 @@ def sparc_amp(y, sparc_params, decode_params, A):
     P_l = P / L
     AT = A.T
 
-    t_max, rtol = decode_params['t_max'], decode_params['rtol']
+    t_max = decode_params['t_max']
 
     # Initialise variables 
     beta = np.zeros(L*M)
@@ -381,7 +447,7 @@ def sparc_amp(y, sparc_params, decode_params, A):
 
     return beta, s 
 
-def sparc_amp_single_run(sparc_params, y, A, AT, beta, z, tau_sqr):
+def sparc_amp_single_it(sparc_params, y, A, AT, beta, z, tau_sqr):
     #(Tested)
 
     P, L, M = sparc_params['P'], sparc_params['L'], sparc_params['M']
@@ -404,7 +470,7 @@ def msg_vector_mmse_estimator(s, tau_sqr, n, P_l, M):
     (possibly complex) independent additive Gaussian noise.
 
     s  : effective observation in Gaussian noise (length L*M vector)
-    tau: the noise variance (length L*M vector)
+    tau_sqr: the noise variance (length L*M vector)
     L  : number of sections (1 non-zero entry per section)
     M  : number of entries per section
     '''
@@ -487,7 +553,7 @@ def S_k_mapping(M):
 
     return S_k
 
-def ldpc_bp(ldpc_probs, c, num_runs, hard_decision_bool):
+def ldpc_bp(ldpc_probs, c, num_its, hard_decision_bool):
     '''
     Takes in ldpc_probs and decodes using bp, returns the probabilites.
     '''
@@ -502,7 +568,7 @@ def ldpc_bp(ldpc_probs, c, num_runs, hard_decision_bool):
     app = []
     app_cut = []
     for chunk in LLR: 
-        decoded = c.decode(chunk, num_runs)[0]
+        decoded = c.decode(chunk, num_its)[0]
         app.append(decoded)
         app_cut.append(decoded[:c.K])
     app = np.array(app)
@@ -519,6 +585,59 @@ def ldpc_bp(ldpc_probs, c, num_runs, hard_decision_bool):
         hard_decision_bits = 0 
 
     return ldpc_probs, hard_decision_bits
+
+def ldpc_bp_test(ldpc_probs, c, num_its, hard_decision_bool):
+    '''
+    Does the same as ldpc_bp but also just extracts the user bits using the fact its a systematic code.
+    '''
+
+    eps = 1e-15  # Small constant to prevent log(0)
+    ldpc_probs = np.clip(ldpc_probs, eps, 1 - eps)
+    LLR = np.log(ldpc_probs) - np.log(1 - ldpc_probs)
+
+    assert len(LLR) % c.N == 0
+    num_blocks = len(LLR) / c.N
+    LLR = np.array_split(LLR, num_blocks)
+    app = []
+    app_cut = []
+    no_bp_cut = []
+    for chunk in LLR: 
+        no_bp_cut.append(chunk[:c.K])
+        decoded = c.decode(chunk, num_its)[0]
+        app.append(decoded)
+        app_cut.append(decoded[:c.K])
+    app = np.array(app)
+    app_cut = np.array(app_cut)
+    no_bp_cut = np.array(no_bp_cut)
+    app = app.flatten()
+    app_cut = app_cut.flatten()
+    no_bp_cut = no_bp_cut.flatten()
+
+    if (hard_decision_bool): 
+        hard_bools = (app_cut < 0)
+        hard_bools_no_bp = (no_bp_cut < 0)
+        hard_decision_bits = np.array([int(bool_val) for bool_val in hard_bools])
+        no_bp_bits = np.array([int(bool_val) for bool_val in hard_bools_no_bp])
+        ldpc_probs = 0 
+    else: 
+        ldpc_probs = (np.exp(app))/(1+np.exp(app))
+        hard_decision_bits = 0 
+
+    return ldpc_probs, hard_decision_bits, no_bp_bits
+
+def ldpc_probs_to_user_bits(ldpc_probs, c): 
+
+    num_blocks = len(ldpc_probs) / c.N
+    ldpc_probs_split = np.array_split(ldpc_probs, num_blocks)
+    user_bits_probs = []
+    for chunk in ldpc_probs_split: 
+        user_bits_probs.append(chunk[:c.K])
+    user_bits_probs = np.array(user_bits_probs)
+    user_bits_probs = user_bits_probs.flatten()
+
+    decoded_user_bits = (user_bits_probs < 0.5).astype(int)
+
+    return decoded_user_bits
 
 def bp_output_to_beta_estimate(ldpc_probs, L, M, sqrt_nP_l): 
     '''
