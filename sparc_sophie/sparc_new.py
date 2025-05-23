@@ -196,6 +196,33 @@ def sparc_ldpc_decode_test_3(y, sparc_params, ldpc_params, decode_params, ldpc_b
 
     return bits_out, no_bp_bits
 
+def no_onsager_decoder(y, sparc_params, ldpc_params, decode_params, A): 
+    '''
+    Combines the decoders but doesn't use an Onsager term to correct dependencies just to see the effect. 
+    '''
+
+    P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
+    n = len(y)
+    sqrt_nP_l = np.sqrt(n * (P/L))
+    c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
+    t_max = decode_params['t_max']
+
+    # Initial AMP + BP
+    beta = np.zeros(L*M)
+    z = 0
+    tau_sqr = 1
+    AT = A.T
+    for i in range(t_max): 
+        beta, z, tau_sqr = amp_no_onsager(sparc_params, y, A, AT, beta, z, tau_sqr)
+        ldpc_probs = beta_estimate_to_bp_probs(beta, L, M, sqrt_nP_l)
+        if (i != t_max-1): 
+            ldpc_probs, _ = ldpc_bp(ldpc_probs, c, 6, False)
+            beta = bp_output_to_beta_estimate(ldpc_probs, L, M, sqrt_nP_l)
+        else: 
+            _, hard_decision_bits = ldpc_bp(ldpc_probs, c, 200, True)
+
+    return hard_decision_bits
+
 def naively_integrated_decoder(y, sparc_params, ldpc_params, decode_params, A): 
     '''
     Aims to combine AMP with BP. AMP single iteration followed by x bp iterations i times. Finished by f bp iterations.
@@ -255,7 +282,7 @@ def naively_integrated_test(y, sparc_params, ldpc_params, decode_params, A):
 
 def naively_integrated_test_2(y, sparc_params, ldpc_params, decode_params, lengths, A):
     '''
-    Outputs the BER before and after BP in specified iterations of AMP.
+    Outputs the decoded user bits before and after BP in specified iterations of AMP.
     '''
     P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
     n = len(y)
@@ -265,7 +292,7 @@ def naively_integrated_test_2(y, sparc_params, ldpc_params, decode_params, lengt
 
     mults = lengths['mults']
     user_bits_len = c.K * mults
-    decoded_user_bits_arr = np.zeros((t_max*2,user_bits_len))
+    decoded_user_bits_arr = np.zeros((6,user_bits_len))
 
     # Initial AMP + BP
     beta = np.zeros(L*M)
@@ -283,6 +310,40 @@ def naively_integrated_test_2(y, sparc_params, ldpc_params, decode_params, lengt
         if i in [10,11,12]:
             decoded_user_bits_arr[store_idx] = ldpc_probs_to_user_bits(ldpc_probs, c)
             store_idx += 1
+        beta = bp_output_to_beta_estimate(ldpc_probs, L, M, sqrt_nP_l)
+
+    return decoded_user_bits_arr
+
+def naively_integrated_test_3(y, sparc_params, ldpc_params, decode_params, lengths, A):
+    '''
+    Outputs the decoded user bits before MMSE, before BP (After MMSe), and after BP in  2 specified iterations of AMP.
+    '''
+    P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
+    n = len(y)
+    sqrt_nP_l = np.sqrt(n * (P/L))
+    c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])   
+    t_max = decode_params['t_max']
+
+    mults = lengths['mults']
+    user_bits_len = c.K * mults
+    decoded_user_bits_arr = np.zeros((6,user_bits_len))
+
+    # Initial AMP + BP
+    beta = np.zeros(L*M)
+    z = 0
+    tau_sqr = 1
+    AT = A.T
+    store_idx = 0
+    for i in range(t_max): 
+        beta, z, tau_sqr, user_bits_before = sparc_amp_single_it_test(sparc_params, y, A, AT, beta, z, tau_sqr, c)
+        ldpc_probs = beta_estimate_to_bp_probs(beta, L, M, sqrt_nP_l)
+        if i in [9,10]: 
+            decoded_user_bits_arr[store_idx] = user_bits_before
+            decoded_user_bits_arr[store_idx+1] = ldpc_probs_to_user_bits(ldpc_probs, c)
+        ldpc_probs, _ = ldpc_bp(ldpc_probs, c, 6, False)
+        if i in [9,10]:
+            decoded_user_bits_arr[store_idx+2] = ldpc_probs_to_user_bits(ldpc_probs, c)
+            store_idx += 3
         beta = bp_output_to_beta_estimate(ldpc_probs, L, M, sqrt_nP_l)
 
     return decoded_user_bits_arr
@@ -356,6 +417,43 @@ def integrated_decoder_test(y, sparc_params, ldpc_params, decode_params, A):
 
     return hard_decision_bits, ldpc_bits_out
 
+def integrated_decoder_test(y, sparc_params, ldpc_params, decode_params, lengths, A): 
+    '''
+    Outputs the decoded user bits before and after mmse estimation after BP for any two
+    consecutive AMP iteraions. 
+    '''
+    P, R, L, M = sparc_params['P'], sparc_params['R'], sparc_params['L'], sparc_params['M']
+    n = len(y)
+    P_l = P/L
+    c = code(ldpc_params["standard"], ldpc_params["rate"], ldpc_params["z"])
+    t_max = decode_params['t_max']
+    num_its = 5
+    S_k = S_k_mapping(M)
+
+    mults = lengths['mults']
+    user_bits_len = c.K * mults
+    decoded_user_bits_arr = np.zeros((6,user_bits_len))
+    store_idx = 0 
+
+    beta = np.zeros(L*M)
+    z = 0
+    differentiated_eta = np.zeros(n)
+    AT = A.T
+    for t in range(t_max):  
+        if t != 0: 
+            differentiated_eta = differentiated_eta_calc(beta, vk, vk_0, alpha, tau_sqr, L, M, S_k, n, P_l)
+        z = y - (np.dot(A, beta)) + z*(np.sum(differentiated_eta)/n)
+        s = np.dot(AT, z) + beta 
+        tau_sqr = np.sum(z ** 2) / n    
+        alpha, vk_0, vk, beta, user_bits_before, user_bits_middle, user_bits_after = eta_test(s, tau_sqr, n, P_l, M, L, c, num_its)
+        if t in [4, 5]: 
+            decoded_user_bits_arr[store_idx] = user_bits_before
+            decoded_user_bits_arr[store_idx+1] = user_bits_middle
+            decoded_user_bits_arr[store_idx+2] = user_bits_after
+            store_idx += 3 
+
+    return decoded_user_bits_arr
+    
 
 ######## AMP + BP decoder ######## --------------------------------------------------------------------------------------------------------------
 
@@ -386,6 +484,33 @@ def eta(s, tau_sqr, n, P_l, M, L, c, num_its, num_its_final, hard_decision_bool)
     assert len(beta) == L*M
     
     return alpha, vk_0, vk, beta, hard_decision_bits
+
+def eta_test(s, tau_sqr, n, P_l, M, L, c, num_its): 
+    
+    sqrt_nP_l = np.sqrt(n*P_l)
+
+    # Step One (Expectation): 
+    decoded_beta = msg_vector_map_estimator(s, M, sqrt_nP_l)
+    decoded_ldpc_bits = msg_vector_2_bin_arr(decoded_beta, M)
+    user_bits_before = ldpc_bits_to_user_bits(decoded_ldpc_bits, c)
+
+    weighted_alpha = msg_vector_mmse_estimator(s, tau_sqr, n, P_l, M)
+    alpha = weighted_alpha/sqrt_nP_l
+    assert len(weighted_alpha) == L*M
+
+    # Step Two (Conversion to codeword bit-wise probabilites): 
+    vk_0 = beta_estimate_to_bp_probs(weighted_alpha, L, M, sqrt_nP_l)
+    user_bits_middle = ldpc_probs_to_user_bits(vk_0, c)
+    assert len(vk_0) == L * np.log2(M)
+
+    # Step Three (Belief Propagation): 
+    vk, _ = ldpc_bp(vk_0, c, num_its, False)
+    user_bits_after = ldpc_probs_to_user_bits(vk, c)
+    # Step Four (Conversion to beta section-wise probabilites): 
+    beta = bp_output_to_beta_estimate(vk, L, M, sqrt_nP_l)
+    assert len(beta) == L*M
+    
+    return alpha, vk_0, vk, beta, user_bits_before, user_bits_middle, user_bits_after
 
 def differentiated_eta_calc(beta, vk, vk_0, alpha, tau_sqr, L, M, S_k, n, P_l): 
     #(Gone over --- Seems to be taking really long)
@@ -456,6 +581,44 @@ def sparc_amp_single_it(sparc_params, y, A, AT, beta, z, tau_sqr):
     Ab = np.dot(A, beta)
     Onsager = (z / tau_sqr) * (P - ((np.sum(beta ** 2))/n) )
     z = y - Ab + Onsager
+
+    ATz = np.dot(AT, z)
+    s = beta + ATz
+    tau_sqr = np.sum(z ** 2) / n 
+    beta = msg_vector_mmse_estimator(s, tau_sqr, n, P_l, M)
+
+    return beta, z, tau_sqr
+
+def sparc_amp_single_it_test(sparc_params, y, A, AT, beta, z, tau_sqr, c):
+    #(Tested)
+
+    P, L, M = sparc_params['P'], sparc_params['L'], sparc_params['M']
+    P_l = P/L
+    n = len(y)
+    Ab = np.dot(A, beta)
+    Onsager = (z / tau_sqr) * (P - ((np.sum(beta ** 2))/n) )
+    z = y - Ab + Onsager
+
+    ATz = np.dot(AT, z)
+    s = beta + ATz
+    tau_sqr = np.sum(z ** 2) / n 
+
+    sqrt_nP_l = np.sqrt(n*P_l)
+    decoded_beta = msg_vector_map_estimator(s, M, sqrt_nP_l)
+    decoded_ldpc_bits = msg_vector_2_bin_arr(decoded_beta, M)
+    user_bits_before = ldpc_bits_to_user_bits(decoded_ldpc_bits, c)
+
+    beta = msg_vector_mmse_estimator(s, tau_sqr, n, P_l, M)
+
+    return beta, z, tau_sqr, user_bits_before
+
+def amp_no_onsager(sparc_params, y, A, AT, beta, z, tau_sqr):
+
+    P, L, M = sparc_params['P'], sparc_params['L'], sparc_params['M']
+    P_l = P/L
+    n = len(y)
+    Ab = np.dot(A, beta)
+    z = y - Ab
 
     ATz = np.dot(AT, z)
     s = beta + ATz
@@ -638,6 +801,18 @@ def ldpc_probs_to_user_bits(ldpc_probs, c):
     decoded_user_bits = (user_bits_probs < 0.5).astype(int)
 
     return decoded_user_bits
+
+def ldpc_bits_to_user_bits(ldpc_bits, c): 
+
+    num_blocks = len(ldpc_bits) / c.N
+    ldpc_bits_split = np.array_split(ldpc_bits, num_blocks)
+    user_bits = []
+    for chunk in ldpc_bits_split: 
+        user_bits.append(chunk[:c.K])
+    user_bits = np.array(user_bits)
+    user_bits = user_bits.flatten()
+
+    return user_bits
 
 def bp_output_to_beta_estimate(ldpc_probs, L, M, sqrt_nP_l): 
     '''

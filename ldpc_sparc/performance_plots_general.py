@@ -18,17 +18,18 @@ import matplotlib.pyplot as plt # type: ignore
 
 #CHANGE BELOW
 #-------------------------------------------------------------------------------------------------
-num_sims    = 6
+num_sims    = 4
 # sims_labels = ['SPARC', 'SPARC+LDPC', 'SPARC+LDPC+RE_RUN', 'Naive_decoder', 'Integrated_decoder']
-sims_labels = ['AMP_1 Before BP', 'AMP_1 After BP','AMP_2 Before BP', 'AMP_2 After BP','AMP_3 Before BP', 'AMP_3 After BP']
+# sims_labels = ['ber_11', 'ber_12', 'ber_13', 'ber_14', 'ber_15', 'ber_16', 'ber_17', 'ber_18', 'ber_19', 'ber_20', 'ber_21']
+sims_labels = ['SPARC', 'SPARC+LDPC', 'Naive_decoder', 'Integrated_decoder']
 
-test_num = 11
-decode_params = {'t_max': 13}  
+test_num = 36
+decode_params = {'t_max': 25}  
 decode_params_integrated = {'t_max': 25}  
-num_of_runs   = 1             
-num_snrs    = 5
-snr_start   = 2.5
-snr_stop    = 4.5
+num_of_runs   = 5             
+num_snrs    = 10
+snr_start   = 2
+snr_stop    = 6
 semi_protected = False 
 
 if (semi_protected == False): 
@@ -39,8 +40,8 @@ if (semi_protected == False):
     int_rate = 1/2
     z = 150
 
-    mults = 1                   # k = 1620 * mults with 5/6 and 81 params
-    logM = 3
+    mults = 4                   # k = 1620 * mults with 5/6 and 81 params
+    logM = 1
     M = pow(2, logM)
     R_sparc_ldpc = 1
     overall_rate, L_sparc, L_sparc_ldpc, lengths = param_calc(mults, logM, standard, ldpc_rate, int_rate, z, R_sparc_ldpc)
@@ -100,13 +101,19 @@ print("Start \n")
 for i in range(num_of_runs):
     rng_seed = rng.randint(0, 2**31-1, size=2).tolist()    # This generates two random integers, not sure why
     for v in range(num_snrs):  
-        # _, _, ber_store[0][v][i] = sparc_ldpc_sim(sparc_params, ldpc_params, lengths, False, decode_params, awgn_var_store[v], rng_seed) 
-        # _, _, ber_store[0][v][i] = sparc_ldpc_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        _, _, ber_store[0][v][i] = sparc_ldpc_sim(sparc_params, ldpc_params, lengths, False, decode_params, awgn_var_store[v], rng_seed) 
+        _, _, ber_store[1][v][i] = sparc_ldpc_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        # _, _, ber_store[2][v][i] = sparc_ldpc_sim_loop(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
         # _, _, ber_store[0][v][i], ber_store[1][v][i] = sparc_ldpc_sim_test(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
-        # _, _, ber_store[2][v][i] = sparc_ldpc_naive_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
-        _,    ber_store[0][v][i], ber_store[1][v][i], ber_store[2][v][i], ber_store[3][v][i], ber_store[4][v][i], ber_store[5][v][i] = naive_sim_test(
-            sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
-        # _, _, ber_store[3][v][i] = sparc_ldpc_integrated_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params_integrated, awgn_var_store[v], rng_seed)
+        _, _, ber_store[2][v][i] = sparc_ldpc_naive_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        # _, _, ber_store[3][v][i] = sparc_ldpc_naive_sim_posteriors(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        # _,    ber_store[0][v][i], ber_store[1][v][i], ber_store[2][v][i], ber_store[3][v][i], ber_store[4][v][i], ber_store[5][v][i], ber_store[6][v][i], ber_store[7][v][i], ber_store[8][v][i], ber_store[9][v][i], ber_store[10][v][i], ber_store[11][v][i], ber_store[12][v][i], ber_store[13][v][i], ber_store[14][v][i], ber_store[15][v][i] = naive_sim_test(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        # _,    ber_store[0][v][i], ber_store[1][v][i], ber_store[2][v][i], ber_store[3][v][i], ber_store[4][v][i], ber_store[5][v][i], ber_store[6][v][i], ber_store[7][v][i], ber_store[8][v][i], ber_store[9][v][i], ber_store[10][v][i] = naive_posteriors_sim_test(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        # _, _, ber_store[3][v][i] = no_onsager_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
+        _, _, ber_store[3][v][i] = sparc_ldpc_integrated_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params_integrated, awgn_var_store[v], rng_seed)
+        # _, _, ber_store[2][v][i] = sparc_ldpc_integrated_sim_test_2(sparc_ldpc_params, ldpc_params, lengths, True, decode_params_integrated, awgn_var_store[v], rng_seed)
+        # _, _, ber_store[3][v][i] = sparc_ldpc_integrated_posteriors_sim(sparc_ldpc_params, ldpc_params, lengths, True, decode_params_integrated, awgn_var_store[v], rng_seed)
+        # _,    ber_store[0][v][i], ber_store[1][v][i], ber_store[2][v][i], ber_store[3][v][i], ber_store[4][v][i], ber_store[5][v][i], ber_store[6][v][i], ber_store[7][v][i], ber_store[8][v][i], ber_store[9][v][i], ber_store[10][v][i] = integrated_sim_test(sparc_ldpc_params, ldpc_params, lengths, True, decode_params, awgn_var_store[v], rng_seed)
         # _, _, ber_store[1][v][i] = sparc_ldpc_integrated_no_bp(sparc_ldpc_params, ldpc_params, lengths, True, decode_params_integrated, awgn_var_store[v], rng_seed)
         print(f"Run {i+1}: Var {v+1}/{num_snrs}")
     

@@ -49,11 +49,24 @@ def sparc_ldpc_naive_sim(sparc_params, ldpc_params, lengths, ldpc_bool, decode_p
     
     return bits_i, bits_o, ber
 
+def no_onsager_sim(sparc_params, ldpc_params, lengths, ldpc_bool, decode_params, awgn_var, rand_seed=None): 
+    '''
+    Simulated encoding, transmitting and decoding 
+    '''
+
+    bits_i, total_bits, beta0, x, A     = sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed)
+    y                       = awgn_channel(x, awgn_var, rand_seed) # Produces the received vector after the channel 
+    bits_o                  = no_onsager_decoder(y, sparc_params, ldpc_params, decode_params, A)
+                                        
+    ber = bit_err_rate(bits_i, bits_o)
+    
+    return bits_i, bits_o, ber
+
 def naive_sim_test(sparc_params, ldpc_params, lengths, ldpc_bool, decode_params, awgn_var, rand_seed=None): 
 
     bits_i, total_bits, beta0, x, A     = sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed)
     y                       = awgn_channel(x, awgn_var, rand_seed) # Produces the received vector after the channel 
-    decoded_user_bits_arr             = naively_integrated_test_2(y, sparc_params, ldpc_params, decode_params, lengths, A)
+    decoded_user_bits_arr             = naively_integrated_test_3(y, sparc_params, ldpc_params, decode_params, lengths, A)
 
     ber_1 = bit_err_rate(bits_i, decoded_user_bits_arr[0])
     ber_2 = bit_err_rate(bits_i, decoded_user_bits_arr[1])
@@ -76,6 +89,21 @@ def sparc_ldpc_integrated_sim(sparc_params, ldpc_params, lengths, ldpc_bool, dec
     ber = bit_err_rate(bits_i, bits_o)
     
     return bits_i, bits_o, ber
+
+def integrated_sim_test(sparc_params, ldpc_params, lengths, ldpc_bool, decode_params, awgn_var, rand_seed=None): 
+
+    bits_i, total_bits, beta0, x, A     = sparc_ldpc_encode(sparc_params, ldpc_params, lengths, ldpc_bool, rand_seed)
+    y                       = awgn_channel(x, awgn_var, rand_seed) # Produces the received vector after the channel 
+    decoded_user_bits_arr             = integrated_decoder_test(y, sparc_params, ldpc_params, decode_params, lengths, A)
+
+    ber_1 = bit_err_rate(bits_i, decoded_user_bits_arr[0])
+    ber_2 = bit_err_rate(bits_i, decoded_user_bits_arr[1])
+    ber_3 = bit_err_rate(bits_i, decoded_user_bits_arr[2])
+    ber_4 = bit_err_rate(bits_i, decoded_user_bits_arr[3])
+    ber_5 = bit_err_rate(bits_i, decoded_user_bits_arr[4])
+    ber_6 = bit_err_rate(bits_i, decoded_user_bits_arr[5])
+    
+    return bits_i, ber_1, ber_2, ber_3, ber_4, ber_5, ber_6
 
 def sparc_ldpc_integrated_no_bp(sparc_params, ldpc_params, lengths, ldpc_bool, decode_params, awgn_var, rand_seed=None): 
     

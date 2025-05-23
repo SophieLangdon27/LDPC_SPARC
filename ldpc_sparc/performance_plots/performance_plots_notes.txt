@@ -40,7 +40,7 @@ encoding/ decoding. So possibly bp is messing up initial amp iterations?
 9. A test to inspect if BP was making the estimate worse after BP due to high error rates. Same parameters as test 7 but just
 plots the BER within the first AMP iteration before and after BP. 
 
-10. A test to see the effect of the BP for within more iterations of AMP. Same as test 9 but now for 3 AMP iterations. 
+10. A test to see the effect of the BP for within more iterations of AMP. Same as test 9 but now for the first 3 AMP iterations. 
 Interpretation: BP seems to be working quite well. We might want to do a similar test with the mmse estimator stage using 
 just the sparc to prove it's working as expected too. 
 
@@ -48,3 +48,62 @@ just the sparc to prove it's working as expected too.
 Interpretation: It seems that BP is having the desired affect but the AMP is bringing the BER rate up every time so it can't
 have an overall improvement - could this be happening due to the Onsager term not correctly removing the dependencies. 
 
+12. No Onsager term decoder inlcuded to compare to the other decoders. Same parameters as test 7: 3 runs for each SNR (2.5-4.5), 
+AMP = 25, ldpc_rate = 1/2, z = 150, c.K = 1800, sparc_rate = 1, logM = 3
+
+13. Similar test as 10 but for the integrated decoder. A test to investigate if mmse and bp are working as expected. BER for 
+before MMSE, after MMSE(Before BP), and after BP for two consecutive AMP runs. Here iterations 1 and 2 are chosen. The curves are 
+more jumbled up for higher noise so possible tau isn't being calculated correctly? Same parameters as test 7. 
+
+14. Same as test 13 but for AMP iterations 10 and 11. 
+
+15. Same for AMP iterations 3 and 4. MMSE seems to worsen BER for the 3rd iteration - could this be tau being wrongly calculated?
+It is less messy than test 14, this could suggest the Onsager term is messing it up as it goes on?
+
+16. AMP iterations 5, 6. Once again MMSE is not acting as expected so either tau is not correct or we haven't put beta in the form 
+of beta + noise?
+
+17 + 18. The same test as 10 and 11 (For naive decoder) but now also including before MMSE. So for iterations 1-2 and 10-11.
+
+
+19. Same parameters as test 7. The BER for the integrated decoder after each AMP iteration to see if it's improving and getting worse,
+or what. Uses integrated_decoder_test_2 which takes s = A*z + beta and uses the map estimator to take the largest value in the section
+to choose as the non-zero term. This is used to calculated the BER at each iteration. 
+Interpretation: Has some weird jumping loop, not too sure why. 
+
+
+20. Same test as 19 for the naive decoder. 
+Interpretation: Earlier iterations are better and make improvments but then they muddle up as we get past the first few and doesn't
+seem to improve. (Either the Onsager term is wrong or there is some numerical error when we get to further iterations?)
+
+21. Setting vk_0 = vk so we have no bp in the threshold function and the onsager term is the same. 
+Interpretation: I think these should be the same now so the Onasger term isn't implemented correctly?
+
+22 - 24. Slighlty random tests just kept incase for now. 
+
+CODE STARTS WORKING -----------------------------------------------------------------------------------------------------------------
+
+25-26. A test to see the effect of using the ldpc probabilities as priors as opposed to replacing the probabilities when M > 2. 
+M = 4, same params as previous tests. 
+Interpretation: Doesn't seem to be working at all not worth trying to figure out more/ debug if that's the case. 
+
+27. Iterations of AMP from 0 - 11 to see how the integrated decoder improves after each iteration. 
+
+28. Same as 27 but for later iterations. Number of iterations doesn't seem to have that much of a difference at this point. 
+
+29. This is just a test to show the working decoder. Params - AMP its: 25 for all, num runs for each snr: 3, P = 19.44, ldpc 
+standard = 802.16, ldpc rate = 1/2, z = 150, c.K = 1800, c.N = 3600, sparc rate = 1.0, n = 3600, logM = 1. This is compared against 
+normal SPARC with rate = 1.0, SPARC+LDPC decoded seperately, and then the naive and integrated decoder. 
+
+30. Same test as 29 but for more snrs and num runs for each snr = 5. 
+
+31. Same test as 30 but for logM = 4. Interpretation: As expected doesn't improve for M > 2 but interestingly for test 30 SPARC+LDPC
+improves on just SPARC. 
+
+32. Same test for logM = 3, but reduced num runs for each snr = 3 for speed.
+
+33. Same for logM = 2. 
+
+34 - 35. Attemps at re running AMP - not working. 
+
+36. Going back to logM = 1 so the same test as 30. Only change is now mults = 4 so n = 14400. 
